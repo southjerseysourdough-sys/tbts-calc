@@ -2,6 +2,9 @@
 
 import { CSSProperties, ElementType, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { DisclaimerModal } from "@/components/disclaimer-modal";
+import { Footer } from "@/components/footer";
+import { useTheme } from "@/components/theme-provider";
 import { Field } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
@@ -30,6 +33,7 @@ const OUNCES_TO_GRAMS = 28.349523125;
 const HOMEPAGE_URL = "https://tallowbethysoap.com/";
 const SHARE_URL = "https://calc.tallowbethysoap.com/";
 const SHARE_TEXT = "Tallow Be Thy Soap Lab | Cold process soap calculator";
+const DISCLAIMER_KEY = "tallow-be-thy-soap-disclaimer-accepted";
 
 function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -261,6 +265,37 @@ function SocialIcon({
   );
 }
 
+function ThemeToggle() {
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const nextLabel = resolvedTheme === "dark" ? "Light mode" : "Dark mode";
+
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="theme-toggle"
+      aria-label={`Switch to ${nextLabel.toLowerCase()}`}
+    >
+      <span className="theme-toggle__icon" aria-hidden="true">
+        {resolvedTheme === "dark" ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path
+              d="M12 3v2.25M12 18.75V21M4.93 4.93l1.6 1.6M17.47 17.47l1.6 1.6M3 12h2.25M18.75 12H21M4.93 19.07l1.6-1.6M17.47 6.53l1.6-1.6"
+              strokeLinecap="round"
+            />
+            <circle cx="12" cy="12" r="4.25" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.77 15.12A8.26 8.26 0 0 1 8.88 3.23a.75.75 0 0 0-.94-.94A9.76 9.76 0 1 0 21.71 16.06a.75.75 0 0 0-.94-.94Z" />
+          </svg>
+        )}
+      </span>
+      <span>{nextLabel}</span>
+    </button>
+  );
+}
+
 function SummaryTab({
   recipe,
   result,
@@ -375,7 +410,7 @@ function QualitiesTab({ result }: { result: SoapCalculationResult }) {
 function WarningsTab({ result }: { result: SoapCalculationResult }) {
   if (result.warnings.length === 0) {
     return (
-      <p className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--text-soft)]">
+      <p className="warning-empty rounded-3xl p-4 text-sm">
         No warning flags at the moment. This formula looks balanced and ready for a recipe card.
       </p>
     );
@@ -386,7 +421,7 @@ function WarningsTab({ result }: { result: SoapCalculationResult }) {
       {result.warnings.map((warning) => (
         <div
           key={warning}
-          className="rounded-3xl border border-[rgba(149,109,47,0.18)] bg-[rgba(255,247,232,0.82)] p-4 text-sm leading-6 text-[var(--warning)]"
+          className="warning-card rounded-3xl p-4 text-sm leading-6"
         >
           {warning}
         </div>
@@ -489,6 +524,7 @@ function PrintRecipeCard({
 }
 
 export function SoapCalculator() {
+  const { resolvedTheme } = useTheme();
   const [draftRecipe, setDraftRecipe] = useState<RecipeState>(DEFAULT_RECIPE);
   const [calculatedRecipe, setCalculatedRecipe] = useState<RecipeState | null>(null);
   const [entryMode, setEntryMode] = useState<EntryMode>("percent");
@@ -497,6 +533,9 @@ export function SoapCalculator() {
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
   const [copyMessage, setCopyMessage] = useState("");
   const [activeTab, setActiveTab] = useState<ResultTab>("summary");
+  const [disclaimerReady, setDisclaimerReady] = useState(false);
+  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
+  const [disclaimerChecked, setDisclaimerChecked] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const pageLoaded = usePageLoaded(reducedMotion);
   const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
@@ -510,6 +549,16 @@ export function SoapCalculator() {
     setTopLevelDrafts(makeTopLevelDrafts(nextRecipe));
     setOilDrafts(makeOilDrafts(nextRecipe));
   };
+
+  useEffect(() => {
+    try {
+      setHasAcceptedDisclaimer(window.localStorage.getItem(DISCLAIMER_KEY) === "true");
+    } catch {
+      setHasAcceptedDisclaimer(false);
+    } finally {
+      setDisclaimerReady(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!copyMessage) {
@@ -889,11 +938,20 @@ export function SoapCalculator() {
   const availableOilOptions = OIL_DATA.filter(
     (oil) => !draftRecipe.oils.some((entry) => entry.id === oil.id),
   );
+  const isDisclaimerOpen = disclaimerReady && !hasAcceptedDisclaimer;
+
+  const handleAcceptDisclaimer = () => {
+    window.localStorage.setItem(DISCLAIMER_KEY, "true");
+    setHasAcceptedDisclaimer(true);
+    setDisclaimerChecked(false);
+  };
 
   return (
     <main
       className="lab-shell"
       data-loaded={pageLoaded}
+      data-theme={resolvedTheme}
+      data-disclaimer-open={isDisclaimerOpen}
       style={
         {
           "--parallax-x": `${parallaxOffset.x}px`,
@@ -901,7 +959,10 @@ export function SoapCalculator() {
         } as CSSProperties
       }
     >
-      <div className="mx-auto max-w-5xl space-y-5 page-fade-shell">
+      <div
+        className="mx-auto max-w-5xl space-y-5 page-fade-shell"
+        aria-hidden={isDisclaimerOpen}
+      >
         <RevealSection
           reducedMotion={reducedMotion}
           className="paper-card p-6 md:p-8 print-hidden"
@@ -909,13 +970,16 @@ export function SoapCalculator() {
         >
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="max-w-2xl">
-              <a
-                href={HOMEPAGE_URL}
-                className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-strong)] transition hover:text-[var(--accent)]"
-              >
-                <span aria-hidden="true">←</span>
-                <span>Back to tallowbethysoap.com</span>
-              </a>
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={HOMEPAGE_URL}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-strong)] transition hover:text-[var(--accent)]"
+                >
+                  <span aria-hidden="true">←</span>
+                  <span>Back to tallowbethysoap.com</span>
+                </a>
+                <ThemeToggle />
+              </div>
               <p className="mt-4 text-xs uppercase tracking-[0.24em] text-[var(--accent-strong)]">
                 Artisan Cold Process Soap Calculator
               </p>
@@ -1177,7 +1241,14 @@ export function SoapCalculator() {
         </div>
 
         {result && calculatedRecipe ? <PrintRecipeCard recipe={calculatedRecipe} result={result} /> : null}
+        <Footer />
       </div>
+      <DisclaimerModal
+        open={isDisclaimerOpen}
+        checked={disclaimerChecked}
+        onCheckedChange={setDisclaimerChecked}
+        onConfirm={handleAcceptDisclaimer}
+      />
     </main>
   );
 }
