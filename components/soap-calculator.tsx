@@ -501,48 +501,72 @@ export function SoapCalculator() {
     }));
   };
 
-  const handleOilPercentChange = (oilId: string, value: string) => {
-    updateOilDraft(oilId, "percent", value);
+  const handleOilPercentChangeAt = (index: number, value: string) => {
+    const oilId = draftRecipe.oils[index]?.id ?? "";
+    updateOilDraft(oilId || `blank-${index}`, "percent", value);
     const parsed = parseLooseNumber(value);
     if (parsed === null) {
       return;
     }
     updateDraft((current) => ({
       ...current,
-      oils: current.oils.map((oil) =>
-        oil.id === oilId ? { ...oil, percent: Math.max(parsed, 0) } : oil,
+      oils: current.oils.map((oil, oilIndex) =>
+        oilIndex === index ? { ...oil, percent: Math.max(parsed, 0) } : oil,
       ),
     }));
   };
 
-  const handleOilWeightChange = (oilId: string, value: string) => {
-    updateOilDraft(oilId, "weight", value);
+  const handleOilWeightChangeAt = (index: number, value: string) => {
+    const oilId = draftRecipe.oils[index]?.id ?? "";
+    updateOilDraft(oilId || `blank-${index}`, "weight", value);
     const parsed = parseLooseNumber(value);
     if (parsed === null) {
       return;
     }
     updateDraft((current) => {
       const weightInGrams = current.unit === "g" ? parsed : parsed * OUNCES_TO_GRAMS;
-      const percent =
-        current.totalOilWeight > 0 ? (weightInGrams / current.totalOilWeight) * 100 : 0;
-
+      const percent = current.totalOilWeight > 0 ? (weightInGrams / current.totalOilWeight) * 100 : 0;
       return {
         ...current,
-        oils: current.oils.map((oil) =>
-          oil.id === oilId ? { ...oil, percent: Math.max(percent, 0) } : oil,
+        oils: current.oils.map((oil, oilIndex) =>
+          oilIndex === index ? { ...oil, percent: Math.max(percent, 0) } : oil,
         ),
       };
     });
   };
 
-  const normalizeOilBlur = (oilId: string) => {
-    const oil = draftRecipe.oils.find((item) => item.id === oilId);
+  const handleOilSelectionChange = (index: number, currentOilId: string, nextOilId: string) => {
+    if (!nextOilId) {
+      return;
+    }
+
+    updateDraft((current) => ({
+      ...current,
+      oils: current.oils.map((oil, oilIndex) =>
+        oilIndex === index ? { ...oil, id: nextOilId } : oil,
+      ),
+    }));
+
+    setOilDrafts((current) => {
+      const next = { ...current };
+      const sourceKey = currentOilId || `blank-${index}`;
+      next[nextOilId] = next[sourceKey] ?? { percent: "", weight: "" };
+      if (sourceKey !== nextOilId) {
+        delete next[sourceKey];
+      }
+      return next;
+    });
+  };
+
+  const normalizeOilBlurAt = (index: number) => {
+    const oil = draftRecipe.oils[index];
     if (!oil) {
       return;
     }
+    const key = oil.id || `blank-${index}`;
     setOilDrafts((current) => ({
       ...current,
-      [oilId]: {
+      [key]: {
         percent: trimTrailingZeros(formatPercent(oil.percent)),
         weight: trimTrailingZeros(
           formatWeight(draftRecipe.totalOilWeight * (oil.percent / 100), draftRecipe.unit),
@@ -615,24 +639,25 @@ export function SoapCalculator() {
   };
 
   const addOil = () => {
-    if (!newOilId || draftRecipe.oils.some((oil) => oil.id === newOilId)) {
-      return;
-    }
     setDraftRecipe((current) => ({
       ...current,
-      oils: [...current.oils, { id: newOilId, percent: 0 }],
+      oils: [...current.oils, { id: newOilId || "", percent: 0 }],
     }));
-    setOilDrafts((current) => ({ ...current, [newOilId]: { percent: "", weight: "" } }));
+    if (newOilId) {
+      setOilDrafts((current) => ({ ...current, [newOilId]: { percent: "", weight: "" } }));
+    }
   };
 
-  const removeOil = (oilId: string) => {
+  const removeOilAt = (index: number) => {
+    const oilId = draftRecipe.oils[index]?.id ?? "";
     setDraftRecipe((current) => ({
       ...current,
-      oils: current.oils.filter((oil) => oil.id !== oilId),
+      oils: current.oils.filter((_, oilIndex) => oilIndex !== index),
     }));
     setOilDrafts((current) => {
       const next = { ...current };
       delete next[oilId];
+      delete next[`blank-${index}`];
       return next;
     });
   };
@@ -877,25 +902,51 @@ export function SoapCalculator() {
             </div>
 
             <div className="table-grid">
-              {draftRecipe.oils.map((oil) => {
+              {draftRecipe.oils.map((oil, index) => {
                 const definition = OIL_MAP.get(oil.id);
-                if (!definition) return null;
-                const draft = oilDrafts[oil.id] ?? { percent: "", weight: "" };
+                const draftKey = oil.id || `blank-${index}`;
+                const draft = oilDrafts[oil.id] ?? oilDrafts[draftKey] ?? { percent: "", weight: "" };
+                const selectableOils = OIL_DATA.filter(
+                  (option) =>
+                    option.id === oil.id ||
+                    !draftRecipe.oils.some((entry) => entry.id === option.id && entry.id !== oil.id),
+                );
 
                 return (
-                  <div key={oil.id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
+                  <div key={`${oil.id || "blank"}-${index}`} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
                     <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] md:items-end">
                       <div>
-                        <p className="text-base font-semibold text-[var(--text)]">{definition.name}</p>
-                        <p className="mt-1 text-sm text-[var(--text-soft)]">NaOH SAP: {definition.sapNaoh}</p>
+                        {definition ? (
+                          <>
+                            <p className="text-base font-semibold text-[var(--text)]">{definition.name}</p>
+                            <p className="mt-1 text-sm text-[var(--text-soft)]">NaOH SAP: {definition.sapNaoh}</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="mb-2 text-sm font-medium text-[var(--text)]">Select oil</p>
+                            <Select
+                              value={oil.id}
+                              onChange={(event) =>
+                                handleOilSelectionChange(index, oil.id, event.target.value)
+                              }
+                            >
+                              <option value="">Choose an oil</option>
+                              {selectableOils.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </>
+                        )}
                       </div>
                       <Field label="Percent">
-                        <TextInput inputMode="decimal" value={draft.percent} onChange={(event) => handleOilPercentChange(oil.id, event.target.value)} onBlur={() => normalizeOilBlur(oil.id)} suffix="%" />
+                        <TextInput inputMode="decimal" value={draft.percent} onChange={(event) => handleOilPercentChangeAt(index, event.target.value)} onBlur={() => normalizeOilBlurAt(index)} suffix="%" />
                       </Field>
                       <Field label={`Weight (${draftRecipe.unit})`}>
-                        <TextInput inputMode="decimal" value={draft.weight} onChange={(event) => handleOilWeightChange(oil.id, event.target.value)} onBlur={() => normalizeOilBlur(oil.id)} suffix={draftRecipe.unit} />
+                        <TextInput inputMode="decimal" value={draft.weight} onChange={(event) => handleOilWeightChangeAt(index, event.target.value)} onBlur={() => normalizeOilBlurAt(index)} suffix={draftRecipe.unit} />
                       </Field>
-                      <button type="button" onClick={() => removeOil(oil.id)} className="rounded-2xl border border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--danger)]">
+                      <button type="button" onClick={() => removeOilAt(index)} className="rounded-2xl border border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--danger)]">
                         Remove
                       </button>
                     </div>

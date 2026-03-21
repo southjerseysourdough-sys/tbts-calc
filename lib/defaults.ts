@@ -1,11 +1,11 @@
 import { RecipeState } from "@/lib/types";
 
 export const DEFAULT_RECIPE: RecipeState = {
-  recipeName: "Founder's Tallow Bar",
-  totalOilWeight: 1000,
+  recipeName: "",
+  totalOilWeight: 0,
   fragranceWeight: 0,
   unit: "g",
-  superfat: 5,
+  superfat: 0,
   water: {
     mode: "lyeConcentration",
     percentOfOils: 33,
@@ -13,9 +13,9 @@ export const DEFAULT_RECIPE: RecipeState = {
     waterLyeRatio: 2.03,
   },
   oils: [
-    { id: "beef-tallow", percent: 50 },
-    { id: "olive-oil", percent: 30 },
-    { id: "coconut-oil-76", percent: 20 },
+    { id: "", percent: 0 },
+    { id: "", percent: 0 },
+    { id: "", percent: 0 },
   ],
 };
 
@@ -31,7 +31,11 @@ export const EMPTY_RECIPE: RecipeState = {
     lyeConcentration: 0.33,
     waterLyeRatio: 2.03,
   },
-  oils: [],
+  oils: [
+    { id: "", percent: 0 },
+    { id: "", percent: 0 },
+    { id: "", percent: 0 },
+  ],
 };
 
 export const SAMPLE_RECIPE: RecipeState = {
