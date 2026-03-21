@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5efe4;
+  --background-deep: #ede2d0;
+  --surface: rgba(255, 251, 245, 0.82);
+  --surface-strong: rgba(255, 250, 242, 0.94);
+  --surface-muted: rgba(245, 236, 223, 0.72);
+  --border: rgba(112, 84, 56, 0.14);
+  --border-strong: rgba(112, 84, 56, 0.22);
+  --text: #34271e;
+  --text-soft: #6f5a49;
+  --accent: #8f6746;
+  --accent-strong: #725035;
+  --accent-soft: #d9c1a5;
+  --danger: #8f4d42;
+  --warning: #956d2f;
+  --shadow: 0 18px 45px rgba(78, 56, 31, 0.08);
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.52), transparent 32%),
+    radial-gradient(circle at top right, rgba(205, 177, 142, 0.18), transparent 28%),
+    linear-gradient(180deg, var(--background) 0%, var(--background-deep) 100%);
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(143, 103, 70, 0.18);
+}
+
+.lab-shell {
+  min-height: 100vh;
+  padding: 32px 16px 56px;
+}
+
+.lab-grid {
+  display: grid;
+  gap: 20px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.paper-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.field-shell {
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.field-shell:focus-within {
+  border-color: rgba(143, 103, 70, 0.38);
+  box-shadow: 0 0 0 4px rgba(143, 103, 70, 0.1);
+}
+
+.field-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.field-input::placeholder {
+  color: #a28b75;
+}
+
+.pill-toggle {
+  border: 1px solid var(--border);
+  background: rgba(255, 251, 245, 0.68);
+  color: var(--text-soft);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.pill-toggle:hover {
+  border-color: rgba(112, 84, 56, 0.25);
+  color: var(--text);
+}
+
+.pill-toggle[data-active="true"] {
+  border-color: rgba(143, 103, 70, 0.32);
+  background: rgba(143, 103, 70, 0.13);
+  color: var(--accent-strong);
+}
+
+.metric-panel {
+  border: 1px solid var(--border);
+  background: rgba(255, 252, 248, 0.7);
+}
+
+.table-grid {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 1024px) {
+  .lab-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    align-items: start;
+  }
+}
+
+@media print {
+  html,
+  body {
+    background: white;
+  }
+
+  .lab-shell {
+    padding: 0;
+  }
+
+  .paper-card {
+    box-shadow: none;
+    backdrop-filter: none;
+    background: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
