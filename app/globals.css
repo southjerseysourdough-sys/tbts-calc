@@ -130,6 +130,31 @@ select {
   gap: 12px;
 }
 
+.recipe-print-card {
+  display: none;
+}
+
+.dot-leader-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.dot-leader-row::before {
+  content: "";
+  border-bottom: 2px dotted rgba(112, 84, 56, 0.35);
+  order: 2;
+}
+
+.dot-leader-row > :first-child {
+  order: 1;
+}
+
+.dot-leader-row > :last-child {
+  order: 3;
+}
+
 @media (min-width: 1024px) {
   .lab-grid {
     grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -155,5 +180,14 @@ select {
 
   .no-print {
     display: none !important;
+  }
+
+  .recipe-print-card {
+    display: block;
+    border: 1px solid #bda88d;
+    border-radius: 18px;
+    padding: 20px;
+    background: white;
+    margin-top: 20px;
   }
 }

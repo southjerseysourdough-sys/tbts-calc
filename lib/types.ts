@@ -37,6 +37,7 @@ export type WaterSettings = {
 export type RecipeState = {
   recipeName: string;
   totalOilWeight: number;
+  fragranceWeight: number;
   unit: Unit;
   superfat: number;
   lyeType: LyeType;
@@ -60,6 +61,7 @@ export type SoapCalculationResult = {
   oils: OilCalculation[];
   totals: {
     oilWeight: number;
+    fragranceWeight: number;
     percent: number;
     lyeAmount: number;
     waterAmount: number;

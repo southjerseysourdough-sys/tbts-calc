@@ -217,10 +217,11 @@ export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
 
   const totals = {
     oilWeight: roundTo(totalOilWeight, 6),
+    fragranceWeight: roundTo(Math.max(recipe.fragranceWeight, 0), 6),
     percent: roundTo(percentTotal, 4),
     lyeAmount: roundTo(lyeAmount, 6),
     waterAmount: roundTo(waterAmount, 6),
-    totalBatch: roundTo(totalOilWeight + lyeAmount + waterAmount, 6),
+    totalBatch: roundTo(totalOilWeight + lyeAmount + waterAmount + Math.max(recipe.fragranceWeight, 0), 6),
     lyeConcentration: roundTo(lyeConcentration, 6),
     waterLyeRatio: roundTo(waterLyeRatio, 6),
     waterPercentOfOils: roundTo(waterPercentOfOils, 6),

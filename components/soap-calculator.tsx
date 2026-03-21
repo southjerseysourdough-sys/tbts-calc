@@ -49,6 +49,7 @@ function makeTopLevelDrafts(recipe: RecipeState) {
   return {
     recipeName: recipe.recipeName,
     totalOilWeight: trimTrailingZeros(formatWeight(recipe.totalOilWeight, recipe.unit)),
+    fragranceWeight: trimTrailingZeros(formatWeight(recipe.fragranceWeight, recipe.unit)),
     superfat: trimTrailingZeros(formatPercent(recipe.superfat)),
     waterPercentOfOils: trimTrailingZeros(formatPercent(recipe.water.percentOfOils)),
     lyeConcentration: trimTrailingZeros(formatPercent(recipe.water.lyeConcentration * 100)),
@@ -129,6 +130,20 @@ export function SoapCalculator() {
     setRecipe((current) => ({
       ...current,
       superfat: clamp(parsed, 0, 20),
+    }));
+  };
+
+  const handleFragranceWeightChange = (value: string) => {
+    setTopLevelDrafts((current) => ({ ...current, fragranceWeight: value }));
+    const parsed = parseLooseNumber(value);
+    if (parsed === null) {
+      return;
+    }
+
+    setRecipe((current) => ({
+      ...current,
+      fragranceWeight:
+        current.unit === "g" ? Math.max(parsed, 0) : Math.max(parsed, 0) * OUNCES_TO_GRAMS,
     }));
   };
 
@@ -314,6 +329,7 @@ export function SoapCalculator() {
       `Total oils: ${formatWeight(result.totals.oilWeight, recipe.unit)} ${recipe.unit}`,
       `${getLyeLabel(recipe.lyeType)}: ${formatWeight(result.totals.lyeAmount, recipe.unit)} ${recipe.unit}`,
       `Water: ${formatWeight(result.totals.waterAmount, recipe.unit)} ${recipe.unit}`,
+      `Fragrance: ${formatWeight(result.totals.fragranceWeight, recipe.unit)} ${recipe.unit}`,
       `Total batch: ${formatWeight(result.totals.totalBatch, recipe.unit)} ${recipe.unit}`,
       `Superfat: ${formatPercent(recipe.superfat)}%`,
       "Oils:",
@@ -421,6 +437,17 @@ export function SoapCalculator() {
                   onBlur={normalizeTopLevelBlur}
                   placeholder="5"
                   suffix="%"
+                />
+              </Field>
+
+              <Field label="Fragrance">
+                <TextInput
+                  inputMode="decimal"
+                  value={topLevelDrafts.fragranceWeight}
+                  onChange={(event) => handleFragranceWeightChange(event.target.value)}
+                  onBlur={normalizeTopLevelBlur}
+                  placeholder="0"
+                  suffix={recipe.unit}
                 />
               </Field>
             </div>
@@ -686,7 +713,11 @@ export function SoapCalculator() {
                 value={`${formatWeight(result.totals.totalBatch, recipe.unit)} ${recipe.unit}`}
                 hint="Before cure"
               />
-              <Stat label="Fragrance" value="Add per IFRA" hint="Placeholder for V1" />
+              <Stat
+                label="Fragrance"
+                value={`${formatWeight(result.totals.fragranceWeight, recipe.unit)} ${recipe.unit}`}
+                hint="Optional"
+              />
               <Stat
                 label="Percent total"
                 value={`${formatPercent(result.totals.percent)}%`}
@@ -785,6 +816,55 @@ export function SoapCalculator() {
               ))}
             </div>
           </Card>
+
+          <section className="recipe-print-card">
+            <p className="text-xs uppercase tracking-[0.2em] text-[#7c5d40]">Print Recipe Card</p>
+            <h2 className="mt-2 text-3xl font-semibold">{recipe.recipeName}</h2>
+            <p className="mt-2 text-sm text-[#6f5a49]">
+              {getLyeLabel(recipe.lyeType)} | {formatPercent(recipe.superfat)}% superfat |{" "}
+              {formatWeight(result.totals.oilWeight, recipe.unit)} {recipe.unit} oils
+            </p>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#7c5d40]">
+                  Oils
+                </h3>
+                <div className="space-y-2">
+                  {result.oils.map((oil) => (
+                    <div key={oil.oilId} className="dot-leader-row text-sm">
+                      <span>{oil.name}</span>
+                      <span>{formatWeight(oil.weight, recipe.unit)} {recipe.unit}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#7c5d40]">
+                  Water and Lye
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="dot-leader-row">
+                    <span>Water</span>
+                    <span>{formatWeight(result.totals.waterAmount, recipe.unit)} {recipe.unit}</span>
+                  </div>
+                  <div className="dot-leader-row">
+                    <span>{getLyeLabel(recipe.lyeType)}</span>
+                    <span>{formatWeight(result.totals.lyeAmount, recipe.unit)} {recipe.unit}</span>
+                  </div>
+                  <div className="dot-leader-row">
+                    <span>Fragrance</span>
+                    <span>{formatWeight(result.totals.fragranceWeight, recipe.unit)} {recipe.unit}</span>
+                  </div>
+                  <div className="dot-leader-row">
+                    <span>Total batch</span>
+                    <span>{formatWeight(result.totals.totalBatch, recipe.unit)} {recipe.unit}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </main>

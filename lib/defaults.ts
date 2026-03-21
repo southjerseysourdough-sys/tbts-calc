@@ -3,6 +3,7 @@ import { RecipeState } from "@/lib/types";
 export const DEFAULT_RECIPE: RecipeState = {
   recipeName: "Founder's Tallow Bar",
   totalOilWeight: 1000,
+  fragranceWeight: 0,
   unit: "g",
   superfat: 5,
   lyeType: "naoh",
@@ -22,6 +23,7 @@ export const DEFAULT_RECIPE: RecipeState = {
 export const SAMPLE_RECIPE: RecipeState = {
   recipeName: "Workshop Conditioning Bar",
   totalOilWeight: 1200,
+  fragranceWeight: 24,
   unit: "g",
   superfat: 6,
   lyeType: "naoh",
