@@ -19,7 +19,7 @@ import {
   parseRatioInput,
   roundTo,
 } from "@/lib/calculations";
-import { DEFAULT_RECIPE, EMPTY_RECIPE, SAMPLE_RECIPE, STORAGE_KEY } from "@/lib/defaults";
+import { DEFAULT_RECIPE, EMPTY_RECIPE, SAMPLE_RECIPE } from "@/lib/defaults";
 import { OIL_DATA, OIL_MAP } from "@/lib/oil-data";
 import { EntryMode, RecipeState, SoapCalculationResult, WaterMode } from "@/lib/types";
 
@@ -394,7 +394,7 @@ function PrintRecipeCard({
 
 export function SoapCalculator() {
   const [draftRecipe, setDraftRecipe] = useState<RecipeState>(DEFAULT_RECIPE);
-  const [calculatedRecipe, setCalculatedRecipe] = useState<RecipeState | null>(DEFAULT_RECIPE);
+  const [calculatedRecipe, setCalculatedRecipe] = useState<RecipeState | null>(null);
   const [entryMode, setEntryMode] = useState<EntryMode>("percent");
   const [newOilId, setNewOilId] = useState("shea-butter");
   const [topLevelDrafts, setTopLevelDrafts] = useState(() => makeTopLevelDrafts(DEFAULT_RECIPE));
@@ -407,26 +407,10 @@ export function SoapCalculator() {
     [calculatedRecipe],
   );
 
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (!saved) {
-        return;
-      }
-
-      const parsed = sanitizeRecipe(JSON.parse(saved) as Partial<RecipeState>);
-      setDraftRecipe(parsed);
-      setCalculatedRecipe(parsed);
-      setTopLevelDrafts(makeTopLevelDrafts(parsed));
-      setOilDrafts(makeOilDrafts(parsed));
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draftRecipe));
-  }, [draftRecipe]);
+  const syncDraftsFromRecipe = (nextRecipe: RecipeState) => {
+    setTopLevelDrafts(makeTopLevelDrafts(nextRecipe));
+    setOilDrafts(makeOilDrafts(nextRecipe));
+  };
 
   useEffect(() => {
     if (!copyMessage) {
@@ -435,11 +419,6 @@ export function SoapCalculator() {
     const timeout = window.setTimeout(() => setCopyMessage(""), 1800);
     return () => window.clearTimeout(timeout);
   }, [copyMessage]);
-
-  const syncDraftsFromRecipe = (nextRecipe: RecipeState) => {
-    setTopLevelDrafts(makeTopLevelDrafts(nextRecipe));
-    setOilDrafts(makeOilDrafts(nextRecipe));
-  };
 
   const updateDraft = (updater: (current: RecipeState) => RecipeState) => {
     setDraftRecipe((current) => updater(current));
