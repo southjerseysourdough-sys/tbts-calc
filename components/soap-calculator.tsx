@@ -258,9 +258,9 @@ function SocialIcon({
       target="_blank"
       rel="noreferrer"
       aria-label={label}
-      className="pill-toggle inline-flex h-11 w-11 items-center justify-center rounded-2xl"
+      className="pill-toggle social-button inline-flex h-11 w-11 items-center justify-center rounded-2xl"
     >
-      <span className="h-5 w-5 text-[var(--accent-strong)]">{children}</span>
+      <span className="h-5 w-5">{children}</span>
     </a>
   );
 }
@@ -1001,11 +1001,11 @@ export function SoapCalculator() {
               </p>
             </div>
 
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 md:min-w-64">
+            <div className="share-module rounded-3xl border p-4 md:min-w-64">
               <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
                 Share this calculator
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="share-module__actions mt-3 flex flex-wrap gap-2 rounded-[1.25rem] p-2">
                 <SocialIcon
                   label="Share on Facebook"
                   href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}`}
@@ -1055,7 +1055,7 @@ export function SoapCalculator() {
                 <TextInput inputMode="decimal" value={topLevelDrafts.totalOilWeight} onChange={(event) => handleTotalOilWeightChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix={draftRecipe.unit} />
               </Field>
               <Field label="Unit">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="control-cluster grid grid-cols-2 gap-2 rounded-[1.4rem] p-2">
                   {(["g", "oz"] as const).map((unit) => (
                     <button key={unit} type="button" className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium uppercase" data-active={draftRecipe.unit === unit} onClick={() => handleUnitChange(unit)}>
                       {unit}
@@ -1074,15 +1074,15 @@ export function SoapCalculator() {
             <div className="mt-5">
               <Field label="Recipe actions">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <button type="button" onClick={resetFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Reset</button>
-                  <button type="button" onClick={loadSample} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Load sample</button>
-                  <button type="button" onClick={normalizeFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Normalize to 100%</button>
+                  <button type="button" onClick={resetFormula} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">Reset</button>
+                  <button type="button" onClick={loadSample} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">Load sample</button>
+                  <button type="button" onClick={normalizeFormula} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">Normalize to 100%</button>
                 </div>
               </Field>
             </div>
 
             <div className="mt-3">
-              <button type="button" onClick={clearAllFields} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">
+              <button type="button" onClick={clearAllFields} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">
                 Clear all fields
               </button>
             </div>
@@ -1101,7 +1101,7 @@ export function SoapCalculator() {
                 Add oil
               </button>
               <Field label="Entry mode" className="md:w-72">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="control-cluster grid grid-cols-2 gap-2 rounded-[1.4rem] p-2">
                   {(["percent", "weight"] as const).map((mode) => (
                     <button key={mode} type="button" className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium capitalize" data-active={entryMode === mode} onClick={() => setEntryMode(mode)}>
                       {mode}
@@ -1234,7 +1234,7 @@ export function SoapCalculator() {
                   <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text)]">{calculatedRecipe.recipeName}</h2>
                   <p className="mt-1 text-sm text-[var(--text-soft)]">Review the formula, then print a clean batch card when you are ready.</p>
                 </div>
-                <div className="result-tab-row">
+                <div className="result-tab-row control-cluster rounded-[1.4rem] p-2">
                   <ResultTabButton active={activeTab === "summary"} label="Formula Summary" onClick={() => setActiveTab("summary")} />
                   <ResultTabButton active={activeTab === "qualities"} label="Soap Qualities" onClick={() => setActiveTab("qualities")} />
                   <ResultTabButton active={activeTab === "warnings"} label="Warnings & Notes" onClick={() => setActiveTab("warnings")} />

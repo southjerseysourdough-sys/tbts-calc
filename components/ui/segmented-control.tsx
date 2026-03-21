@@ -17,7 +17,7 @@ export function SegmentedControl<T extends string>({
   onChange,
 }: SegmentedControlProps<T>) {
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <div className="control-cluster grid grid-cols-1 gap-2 rounded-[1.4rem] p-2 sm:grid-cols-3">
       {options.map((option) => (
         <button
           key={option.value}
