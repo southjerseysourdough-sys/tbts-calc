@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { CSSProperties, ElementType, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -30,6 +30,102 @@ const OUNCES_TO_GRAMS = 28.349523125;
 const HOMEPAGE_URL = "https://tallowbethysoap.com/";
 const SHARE_URL = "https://calc.tallowbethysoap.com/";
 const SHARE_TEXT = "Tallow Be Thy Soap Lab | Cold process soap calculator";
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleChange = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function usePageLoaded(reducedMotion: boolean) {
+  const [isLoaded, setIsLoaded] = useState(reducedMotion);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setIsLoaded(true);
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => setIsLoaded(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [reducedMotion]);
+
+  return isLoaded;
+}
+
+type RevealSectionProps<T extends ElementType> = {
+  as?: T;
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+  reducedMotion: boolean;
+};
+
+function RevealSection<T extends ElementType = "section">({
+  as,
+  children,
+  className,
+  delay = 0,
+  reducedMotion,
+}: RevealSectionProps<T>) {
+  const Component = (as ?? "section") as ElementType;
+  const ref = useRef<HTMLElement | null>(null);
+  const [isVisible, setIsVisible] = useState(reducedMotion);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setIsVisible(true);
+      return;
+    }
+
+    const node = ref.current;
+    if (!node) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          return;
+        }
+
+        setIsVisible(true);
+        observer.disconnect();
+      },
+      {
+        threshold: 0.16,
+        rootMargin: "0px 0px -12% 0px",
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [reducedMotion]);
+
+  return (
+    <Component
+      ref={ref}
+      className={`motion-reveal ${className ?? ""}`.trim()}
+      data-visible={isVisible}
+      style={{ "--reveal-delay": `${delay}ms` } as CSSProperties}
+    >
+      {children}
+    </Component>
+  );
+}
 
 function trimTrailingZeros(value: string) {
   return value.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
@@ -401,6 +497,9 @@ export function SoapCalculator() {
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
   const [copyMessage, setCopyMessage] = useState("");
   const [activeTab, setActiveTab] = useState<ResultTab>("summary");
+  const reducedMotion = usePrefersReducedMotion();
+  const pageLoaded = usePageLoaded(reducedMotion);
+  const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
 
   const result = useMemo(
     () => (calculatedRecipe ? calculateRecipe(calculatedRecipe) : null),
@@ -419,6 +518,48 @@ export function SoapCalculator() {
     const timeout = window.setTimeout(() => setCopyMessage(""), 1800);
     return () => window.clearTimeout(timeout);
   }, [copyMessage]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setParallaxOffset({ x: 0, y: 0 });
+      return;
+    }
+
+    let frame = 0;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        const x = ((event.clientX / window.innerWidth) - 0.5) * 14;
+        const y = ((event.clientY / window.innerHeight) - 0.5) * 10;
+        setParallaxOffset({ x, y });
+      });
+    };
+
+    const handlePointerLeave = () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        setParallaxOffset({ x: 0, y: 0 });
+      });
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, [reducedMotion]);
 
   const updateDraft = (updater: (current: RecipeState) => RecipeState) => {
     setDraftRecipe((current) => updater(current));
@@ -750,9 +891,22 @@ export function SoapCalculator() {
   );
 
   return (
-    <main className="lab-shell">
-      <div className="mx-auto max-w-5xl space-y-5">
-        <section className="paper-card p-6 md:p-8 print-hidden">
+    <main
+      className="lab-shell"
+      data-loaded={pageLoaded}
+      style={
+        {
+          "--parallax-x": `${parallaxOffset.x}px`,
+          "--parallax-y": `${parallaxOffset.y}px`,
+        } as CSSProperties
+      }
+    >
+      <div className="mx-auto max-w-5xl space-y-5 page-fade-shell">
+        <RevealSection
+          reducedMotion={reducedMotion}
+          className="paper-card p-6 md:p-8 print-hidden"
+          delay={40}
+        >
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="max-w-2xl">
               <a
@@ -814,10 +968,11 @@ export function SoapCalculator() {
               </div>
             </div>
           </div>
-        </section>
+        </RevealSection>
 
         <div className="space-y-5 print-hidden">
-          <Card title="Batch setup" subtitle="Set your batch inputs first, then calculate when you're ready.">
+          <RevealSection reducedMotion={reducedMotion} as="div" delay={90}>
+            <Card title="Batch setup" subtitle="Set your batch inputs first, then calculate when you're ready.">
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Recipe name">
                 <TextInput value={topLevelDrafts.recipeName} onChange={(event) => handleRecipeName(event.target.value)} />
@@ -857,9 +1012,11 @@ export function SoapCalculator() {
                 Clear all fields
               </button>
             </div>
-          </Card>
+            </Card>
+          </RevealSection>
 
-          <Card title="Oil composition" subtitle="Build the formula by percentage or by weight.">
+          <RevealSection reducedMotion={reducedMotion} as="div" delay={130}>
+            <Card title="Oil composition" subtitle="Build the formula by percentage or by weight.">
             <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 md:flex-row md:items-end">
               <Field label="Add oil" className="flex-1">
                 <Select value={newOilId} onChange={(event) => setNewOilId(event.target.value)}>
@@ -933,9 +1090,11 @@ export function SoapCalculator() {
                 );
               })}
             </div>
-          </Card>
+            </Card>
+          </RevealSection>
 
-          <Card title="Water settings" subtitle="Choose one water method and keep the others in sync.">
+          <RevealSection reducedMotion={reducedMotion} as="div" delay={170}>
+            <Card title="Water settings" subtitle="Choose one water method and keep the others in sync.">
             <Field label="Water calculation mode">
               <SegmentedControl
                 value={draftRecipe.water.mode}
@@ -958,9 +1117,14 @@ export function SoapCalculator() {
                 <TextInput inputMode="text" value={topLevelDrafts.waterLyeRatio} onChange={(event) => handleWaterValueChange("waterLyeRatio", event.target.value)} onBlur={normalizeWaterBlur} placeholder="2:1" />
               </Field>
             </div>
-          </Card>
+            </Card>
+          </RevealSection>
 
-          <section className="paper-card p-5 md:p-6">
+          <RevealSection
+            reducedMotion={reducedMotion}
+            className="paper-card p-5 md:p-6"
+            delay={210}
+          >
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-semibold tracking-tight text-[var(--text)]">Calculate and Review</h2>
@@ -982,10 +1146,14 @@ export function SoapCalculator() {
               </div>
             </div>
             {copyMessage ? <p className="mt-3 text-sm text-[var(--accent-strong)]">{copyMessage}</p> : null}
-          </section>
+          </RevealSection>
 
           {result && calculatedRecipe ? (
-            <section className="paper-card results-card p-5 md:p-6">
+            <RevealSection
+              reducedMotion={reducedMotion}
+              className="paper-card results-card p-5 md:p-6"
+              delay={100}
+            >
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">Calculated recipe</p>
@@ -1004,7 +1172,7 @@ export function SoapCalculator() {
                 {activeTab === "qualities" ? <QualitiesTab result={result} /> : null}
                 {activeTab === "warnings" ? <WarningsTab result={result} /> : null}
               </div>
-            </section>
+            </RevealSection>
           ) : null}
         </div>
 
