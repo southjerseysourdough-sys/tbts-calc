@@ -206,7 +206,7 @@ select {
 }
 
 .print-section {
-  margin-top: 26px;
+  margin-top: 22px;
 }
 
 .print-section h2 {
@@ -220,7 +220,7 @@ select {
 .print-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 18px;
+  gap: 10px 16px;
 }
 
 .print-grid span {
@@ -233,12 +233,12 @@ select {
   display: block;
   margin-top: 4px;
   color: #2d2119;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .print-row {
   color: #2d2119;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .print-note,
@@ -287,10 +287,14 @@ select {
     display: block;
     border: 1px solid #d2bea4;
     border-radius: 18px;
-    padding: 24px;
+    padding: 21px;
     background: white;
     box-shadow: none;
     margin: 0;
+    transform: scale(0.9);
+    transform-origin: top center;
+    width: 111.111%;
+    margin-left: -5.555%;
   }
 
   .dot-leader-row::before {
@@ -299,5 +303,9 @@ select {
 
   .print-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .print-note {
+    margin-top: 2px;
   }
 }

@@ -354,7 +354,7 @@ function PrintRecipeCard({
       <div className="print-section">
         <h2>Warnings and notes</h2>
         {result.warnings.length === 0 ? (
-          <p className="print-note">No warning flags for this formula.</p>
+          <p className="print-note">No warning flags.</p>
         ) : (
           <ul className="print-list">
             {result.warnings.map((warning) => (
