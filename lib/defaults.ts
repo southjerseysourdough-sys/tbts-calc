@@ -6,7 +6,6 @@ export const DEFAULT_RECIPE: RecipeState = {
   fragranceWeight: 0,
   unit: "g",
   superfat: 5,
-  lyeType: "naoh",
   water: {
     mode: "lyeConcentration",
     percentOfOils: 33,
@@ -26,7 +25,6 @@ export const SAMPLE_RECIPE: RecipeState = {
   fragranceWeight: 24,
   unit: "g",
   superfat: 6,
-  lyeType: "naoh",
   water: {
     mode: "waterLyeRatio",
     percentOfOils: 33.18,

@@ -1,6 +1,5 @@
 import { OIL_MAP } from "@/lib/oil-data";
 import {
-  LyeType,
   OilCalculation,
   RecipeOil,
   RecipeState,
@@ -96,10 +95,7 @@ export function getWaterFromMode(
   }
 }
 
-export function summarizeQuality(
-  oils: OilCalculation[],
-  totalOilWeight: number,
-): SoapQualityProfile {
+function summarizeQuality(oils: OilCalculation[], totalOilWeight: number): SoapQualityProfile {
   const initial: SoapQualityProfile = {
     hardness: 0,
     cleansing: 0,
@@ -128,10 +124,7 @@ export function summarizeQuality(
   return initial;
 }
 
-export function getWarnings(
-  oils: OilCalculation[],
-  totals: SoapCalculationResult["totals"],
-) {
+function getWarnings(oils: OilCalculation[], totals: SoapCalculationResult["totals"]) {
   const warnings: string[] = [];
   const coconut = oils.find((oil) => oil.oilId === "coconut-oil-76");
   const castor = oils.find((oil) => oil.oilId === "castor-oil");
@@ -162,22 +155,17 @@ export function getWarnings(
       "Water is below 22% of oils, which can accelerate trace and reduce time for intricate designs.",
     );
   }
-  if (totals.lyeConcentration > 0.4) {
-    warnings.push(
-      "Lye concentration is above 40%, which is a fairly concentrated solution and may move quickly in cold process soap.",
-    );
-  }
-  if (totals.lyeConcentration < 0.25 && totals.lyeAmount > 0) {
-    warnings.push(
-      "Lye concentration is below 25%, which is a relatively water-heavy solution and may slow cure or increase ash risk.",
-    );
-  }
 
   return warnings;
 }
 
 export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
-  const totalOilWeight = Math.max(recipe.totalOilWeight, 0);
+  const totalOilWeight = Math.max(Number.isFinite(recipe.totalOilWeight) ? recipe.totalOilWeight : 0, 0);
+  const fragranceWeight = Math.max(
+    Number.isFinite(recipe.fragranceWeight) ? recipe.fragranceWeight : 0,
+    0,
+  );
+
   const oils: OilCalculation[] = recipe.oils
     .map((recipeOil: RecipeOil) => {
       const definition = OIL_MAP.get(recipeOil.id);
@@ -188,7 +176,6 @@ export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
       const percent = Math.max(recipeOil.percent, 0);
       const weight = totalOilWeight * (percent / 100);
       const baseNaoh = weight * definition.sapNaoh;
-      const baseKoh = weight * definition.sapKoh;
       const discountMultiplier = 1 - recipe.superfat / 100;
 
       return {
@@ -197,19 +184,14 @@ export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
         percent: roundTo(percent, 4),
         weight: roundTo(weight, 6),
         sapNaoh: definition.sapNaoh,
-        sapKoh: definition.sapKoh,
         lyeNaoh: roundTo(baseNaoh * discountMultiplier, 6),
-        lyeKoh: roundTo(baseKoh * discountMultiplier, 6),
         qualities: definition.qualities,
       };
     })
     .filter((oil): oil is OilCalculation => oil !== null);
 
   const percentTotal = oils.reduce((sum, oil) => sum + oil.percent, 0);
-  const lyeAmount = oils.reduce(
-    (sum, oil) => sum + (recipe.lyeType === "naoh" ? oil.lyeNaoh : oil.lyeKoh),
-    0,
-  );
+  const lyeAmount = oils.reduce((sum, oil) => sum + oil.lyeNaoh, 0);
   const waterAmount = getWaterFromMode(recipe.water.mode, totalOilWeight, lyeAmount, recipe.water);
   const lyeConcentration = lyeAmount > 0 ? lyeAmount / (lyeAmount + waterAmount) : 0;
   const waterLyeRatio = lyeAmount > 0 ? waterAmount / lyeAmount : 0;
@@ -217,11 +199,11 @@ export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
 
   const totals = {
     oilWeight: roundTo(totalOilWeight, 6),
-    fragranceWeight: roundTo(Math.max(recipe.fragranceWeight, 0), 6),
+    fragranceWeight: roundTo(fragranceWeight, 6),
     percent: roundTo(percentTotal, 4),
     lyeAmount: roundTo(lyeAmount, 6),
     waterAmount: roundTo(waterAmount, 6),
-    totalBatch: roundTo(totalOilWeight + lyeAmount + waterAmount + Math.max(recipe.fragranceWeight, 0), 6),
+    totalBatch: roundTo(totalOilWeight + lyeAmount + waterAmount + fragranceWeight, 6),
     lyeConcentration: roundTo(lyeConcentration, 6),
     waterLyeRatio: roundTo(waterLyeRatio, 6),
     waterPercentOfOils: roundTo(waterPercentOfOils, 6),
@@ -270,8 +252,4 @@ export function deriveWaterSettingsFromCurrent(
     waterLyeRatio: clamp(currentResult.totals.waterLyeRatio || 2, 0.5, 5),
     mode,
   };
-}
-
-export function getLyeLabel(lyeType: LyeType) {
-  return lyeType === "naoh" ? "NaOH" : "KOH";
 }
