@@ -36,9 +36,15 @@ function resolveTheme(theme: ThemeMode): ResolvedTheme {
   return theme === "system" ? getSystemTheme() : theme;
 }
 
+type ThemeTransitionState = {
+  direction: "light-to-dark" | "dark-to-light";
+  key: number;
+} | null;
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>("system");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+  const [transitionState, setTransitionState] = useState<ThemeTransitionState>(null);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
@@ -75,10 +81,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, [theme]);
 
+  useEffect(() => {
+    if (!transitionState) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setTransitionState(null);
+    }, 760);
+
+    return () => window.clearTimeout(timeout);
+  }, [transitionState]);
+
   const setTheme = useCallback((nextTheme: ThemeMode) => {
+    const nextResolvedTheme = resolveTheme(nextTheme);
+    if (nextResolvedTheme !== resolvedTheme) {
+      setTransitionState({
+        direction: nextResolvedTheme === "dark" ? "light-to-dark" : "dark-to-light",
+        key: Date.now(),
+      });
+    }
+
     setThemeState(nextTheme);
     window.localStorage.setItem(STORAGE_KEY, nextTheme);
-  }, []);
+  }, [resolvedTheme]);
 
   const toggleTheme = useCallback(() => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
@@ -94,7 +120,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [resolvedTheme, setTheme, theme, toggleTheme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+      {transitionState ? (
+        <div
+          key={transitionState.key}
+          className="theme-transition-veil"
+          data-direction={transitionState.direction}
+          aria-hidden="true"
+        />
+      ) : null}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {
