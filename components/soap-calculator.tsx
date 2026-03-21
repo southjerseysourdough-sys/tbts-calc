@@ -21,9 +21,10 @@ import {
 } from "@/lib/calculations";
 import { DEFAULT_RECIPE, SAMPLE_RECIPE, STORAGE_KEY } from "@/lib/defaults";
 import { OIL_DATA, OIL_MAP } from "@/lib/oil-data";
-import { EntryMode, RecipeState, WaterMode } from "@/lib/types";
+import { EntryMode, RecipeState, SoapCalculationResult, WaterMode } from "@/lib/types";
 
 type OilDraftMap = Record<string, { percent: string; weight: string }>;
+type ResultTab = "summary" | "qualities" | "warnings";
 
 const OUNCES_TO_GRAMS = 28.349523125;
 
@@ -107,70 +108,263 @@ function makeTopLevelDrafts(recipe: RecipeState) {
   };
 }
 
-function buildPrintHtml(recipe: RecipeState) {
-  const result = calculateRecipe(recipe);
-  const oilRows = result.oils
-    .map(
-      (oil) => `
-        <div class="row">
-          <span>${oil.name}</span>
-          <span>${formatWeight(oil.weight, recipe.unit)} ${recipe.unit}</span>
-        </div>`,
-    )
-    .join("");
+function getWaterModeLabel(recipe: RecipeState, result: SoapCalculationResult) {
+  switch (recipe.water.mode) {
+    case "percentOfOils":
+      return `${formatPercent(result.totals.waterPercentOfOils)}% of oils`;
+    case "lyeConcentration":
+      return `${formatPercent(result.totals.lyeConcentration * 100)}% lye concentration`;
+    case "waterLyeRatio":
+      return `${formatRatio(result.totals.waterLyeRatio)} water : lye`;
+  }
+}
 
-  return `<!doctype html>
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <title>${recipe.recipeName} | Tallow Be Thy Soap Lab</title>
-      <style>
-        body { margin: 0; background: #f6f0e7; color: #302219; font-family: Georgia, Cambria, "Times New Roman", serif; }
-        .page { max-width: 760px; margin: 0 auto; padding: 32px; }
-        .card { background: white; border: 1px solid #dbc9b1; border-radius: 22px; padding: 28px; box-shadow: 0 20px 50px rgba(69, 47, 19, 0.08); }
-        .eyebrow { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #8a6849; }
-        h1 { margin: 10px 0 6px; font-size: 44px; line-height: 1; }
-        .sub { margin: 0; color: #6d5848; font-size: 16px; }
-        .section { margin-top: 28px; }
-        .section h2 { margin: 0 0 12px; font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a6849; }
-        .row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: end; font-size: 16px; margin: 8px 0; }
-        .row::before { content: ""; border-bottom: 2px dotted #ccb79d; order: 2; }
-        .row span:first-child { order: 1; }
-        .row span:last-child { order: 3; font-weight: 600; }
-        .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #eadfce; }
-        .meta-item { font-size: 15px; color: #6d5848; }
-        .meta-item strong { display: block; margin-top: 4px; color: #302219; font-size: 22px; }
-        @media print { body { background: white; } .page { padding: 0; } .card { box-shadow: none; border-color: #d4c0a5; } }
-      </style>
-    </head>
-    <body>
-      <div class="page">
-        <div class="card">
-          <p class="eyebrow">Tallow Be Thy Soap Lab</p>
-          <h1>${recipe.recipeName}</h1>
-          <p class="sub">Cold process recipe card</p>
-          <div class="section">
-            <h2>Oils</h2>
-            ${oilRows}
+function ResultTabButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="result-tab rounded-2xl px-4 py-3 text-sm font-medium"
+      data-active={active}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SummaryTab({
+  recipe,
+  result,
+}: {
+  recipe: RecipeState;
+  result: SoapCalculationResult;
+}) {
+  const totalPercentDifference = roundTo(100 - result.totals.percent, 2);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <Stat
+          label="Total oils"
+          value={`${formatWeight(result.totals.oilWeight, recipe.unit)} ${recipe.unit}`}
+        />
+        <Stat
+          label="NaOH"
+          value={`${formatWeight(result.totals.lyeAmount, recipe.unit)} ${recipe.unit}`}
+        />
+        <Stat
+          label="Water"
+          value={`${formatWeight(result.totals.waterAmount, recipe.unit)} ${recipe.unit}`}
+        />
+        <Stat
+          label="Fragrance"
+          value={`${formatWeight(result.totals.fragranceWeight, recipe.unit)} ${recipe.unit}`}
+          hint="Optional"
+        />
+        <Stat
+          label="Total batch"
+          value={`${formatWeight(result.totals.totalBatch, recipe.unit)} ${recipe.unit}`}
+          hint="Before cure"
+        />
+        <Stat
+          label="Percent total"
+          value={`${formatPercent(result.totals.percent)}%`}
+          hint={
+            totalPercentDifference === 0
+              ? "Balanced at 100%"
+              : `${totalPercentDifference > 0 ? "Missing" : "Over by"} ${Math.abs(totalPercentDifference).toFixed(2)}%`
+          }
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+            Oil Breakdown
+          </p>
+          <div className="mt-3 space-y-2">
+            {result.oils.map((oil) => (
+              <div
+                key={oil.oilId}
+                className="dot-leader-row text-sm text-[var(--text-soft)]"
+              >
+                <span>
+                  {oil.name} ({formatPercent(oil.percent)}%)
+                </span>
+                <span className="font-semibold text-[var(--text)]">
+                  {formatWeight(oil.weight, recipe.unit)} {recipe.unit}
+                </span>
+              </div>
+            ))}
           </div>
-          <div class="section">
-            <h2>Solution and Additives</h2>
-            <div class="row"><span>Water</span><span>${formatWeight(result.totals.waterAmount, recipe.unit)} ${recipe.unit}</span></div>
-            <div class="row"><span>NaOH</span><span>${formatWeight(result.totals.lyeAmount, recipe.unit)} ${recipe.unit}</span></div>
-            <div class="row"><span>Fragrance</span><span>${formatWeight(result.totals.fragranceWeight, recipe.unit)} ${recipe.unit}</span></div>
-            <div class="row"><span>Total batch</span><span>${formatWeight(result.totals.totalBatch, recipe.unit)} ${recipe.unit}</span></div>
-          </div>
-          <div class="meta">
-            <div class="meta-item">Total oils<strong>${formatWeight(result.totals.oilWeight, recipe.unit)} ${recipe.unit}</strong></div>
-            <div class="meta-item">Superfat<strong>${formatPercent(recipe.superfat)}%</strong></div>
-            <div class="meta-item">Lye concentration<strong>${formatPercent(result.totals.lyeConcentration * 100)}%</strong></div>
-            <div class="meta-item">Water : lye<strong>${formatRatio(result.totals.waterLyeRatio)}</strong></div>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+            Formula Settings
+          </p>
+          <div className="mt-3 grid gap-3 text-sm text-[var(--text-soft)]">
+            <div className="flex items-center justify-between gap-3">
+              <span>Superfat</span>
+              <strong className="text-[var(--text)]">{formatPercent(recipe.superfat)}%</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Water setting</span>
+              <strong className="text-right text-[var(--text)]">
+                {getWaterModeLabel(recipe, result)}
+              </strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Lye concentration</span>
+              <strong className="text-[var(--text)]">
+                {formatPercent(result.totals.lyeConcentration * 100)}%
+              </strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Water : lye</span>
+              <strong className="text-[var(--text)]">
+                {formatRatio(result.totals.waterLyeRatio)}
+              </strong>
+            </div>
           </div>
         </div>
       </div>
-      <script>window.onload = () => window.print();</script>
-    </body>
-  </html>`;
+    </div>
+  );
+}
+
+function QualitiesTab({ result }: { result: SoapCalculationResult }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {Object.entries(result.qualities).map(([key, value]) => (
+        <Stat key={key} label={key} value={roundTo(value, 2).toFixed(2)} />
+      ))}
+    </div>
+  );
+}
+
+function WarningsTab({ result }: { result: SoapCalculationResult }) {
+  if (result.warnings.length === 0) {
+    return (
+      <p className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--text-soft)]">
+        No warning flags at the moment. This formula looks balanced and ready for a recipe card.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {result.warnings.map((warning) => (
+        <div
+          key={warning}
+          className="rounded-3xl border border-[rgba(149,109,47,0.18)] bg-[rgba(255,247,232,0.82)] p-4 text-sm leading-6 text-[var(--warning)]"
+        >
+          {warning}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PrintRecipeCard({
+  recipe,
+  result,
+}: {
+  recipe: RecipeState;
+  result: SoapCalculationResult;
+}) {
+  return (
+    <section className="recipe-print-card">
+      <p className="print-eyebrow">Tallow Be Thy Soap Lab</p>
+      <h1 className="print-title">{recipe.recipeName}</h1>
+      <p className="print-subtitle">Cold process soap recipe card</p>
+
+      <div className="print-section">
+        <h2>Batch overview</h2>
+        <div className="print-grid">
+          <div>
+            <span>Total oils</span>
+            <strong>{formatWeight(result.totals.oilWeight, recipe.unit)} {recipe.unit}</strong>
+          </div>
+          <div>
+            <span>Superfat</span>
+            <strong>{formatPercent(recipe.superfat)}%</strong>
+          </div>
+          <div>
+            <span>Water setting</span>
+            <strong>{getWaterModeLabel(recipe, result)}</strong>
+          </div>
+          <div>
+            <span>Total batch</span>
+            <strong>{formatWeight(result.totals.totalBatch, recipe.unit)} {recipe.unit}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div className="print-section">
+        <h2>Oil breakdown</h2>
+        <div className="space-y-2">
+          {result.oils.map((oil) => (
+            <div key={oil.oilId} className="dot-leader-row print-row">
+              <span>{oil.name} ({formatPercent(oil.percent)}%)</span>
+              <span>{formatWeight(oil.weight, recipe.unit)} {recipe.unit}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="print-section">
+        <h2>Solution and additives</h2>
+        <div className="space-y-2">
+          <div className="dot-leader-row print-row">
+            <span>NaOH</span>
+            <span>{formatWeight(result.totals.lyeAmount, recipe.unit)} {recipe.unit}</span>
+          </div>
+          <div className="dot-leader-row print-row">
+            <span>Water</span>
+            <span>{formatWeight(result.totals.waterAmount, recipe.unit)} {recipe.unit}</span>
+          </div>
+          <div className="dot-leader-row print-row">
+            <span>Fragrance</span>
+            <span>{formatWeight(result.totals.fragranceWeight, recipe.unit)} {recipe.unit}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="print-section">
+        <h2>Soap qualities</h2>
+        <div className="print-grid">
+          {Object.entries(result.qualities).map(([key, value]) => (
+            <div key={key}>
+              <span>{key}</span>
+              <strong>{roundTo(value, 2).toFixed(2)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="print-section">
+        <h2>Warnings and notes</h2>
+        {result.warnings.length === 0 ? (
+          <p className="print-note">No warning flags for this formula.</p>
+        ) : (
+          <ul className="print-list">
+            {result.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export function SoapCalculator() {
@@ -181,6 +375,7 @@ export function SoapCalculator() {
   const [topLevelDrafts, setTopLevelDrafts] = useState(() => makeTopLevelDrafts(DEFAULT_RECIPE));
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
   const [copyMessage, setCopyMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<ResultTab>("summary");
 
   const result = useMemo(
     () => (calculatedRecipe ? calculateRecipe(calculatedRecipe) : null),
@@ -190,7 +385,10 @@ export function SoapCalculator() {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (!saved) return;
+      if (!saved) {
+        return;
+      }
+
       const parsed = sanitizeRecipe(JSON.parse(saved) as Partial<RecipeState>);
       setDraftRecipe(parsed);
       setCalculatedRecipe(parsed);
@@ -206,7 +404,9 @@ export function SoapCalculator() {
   }, [draftRecipe]);
 
   useEffect(() => {
-    if (!copyMessage) return;
+    if (!copyMessage) {
+      return;
+    }
     const timeout = window.setTimeout(() => setCopyMessage(""), 1800);
     return () => window.clearTimeout(timeout);
   }, [copyMessage]);
@@ -228,27 +428,35 @@ export function SoapCalculator() {
   const handleTotalOilWeightChange = (value: string) => {
     setTopLevelDrafts((current) => ({ ...current, totalOilWeight: value }));
     const parsed = parseLooseNumber(value);
-    if (parsed === null) return;
+    if (parsed === null) {
+      return;
+    }
     updateDraft((current) => ({
       ...current,
-      totalOilWeight: current.unit === "g" ? Math.max(parsed, 0) : Math.max(parsed, 0) * OUNCES_TO_GRAMS,
+      totalOilWeight:
+        current.unit === "g" ? Math.max(parsed, 0) : Math.max(parsed, 0) * OUNCES_TO_GRAMS,
     }));
   };
 
   const handleFragranceWeightChange = (value: string) => {
     setTopLevelDrafts((current) => ({ ...current, fragranceWeight: value }));
     const parsed = parseLooseNumber(value);
-    if (parsed === null) return;
+    if (parsed === null) {
+      return;
+    }
     updateDraft((current) => ({
       ...current,
-      fragranceWeight: current.unit === "g" ? Math.max(parsed, 0) : Math.max(parsed, 0) * OUNCES_TO_GRAMS,
+      fragranceWeight:
+        current.unit === "g" ? Math.max(parsed, 0) : Math.max(parsed, 0) * OUNCES_TO_GRAMS,
     }));
   };
 
   const handleSuperfatChange = (value: string) => {
     setTopLevelDrafts((current) => ({ ...current, superfat: value }));
     const parsed = parseLooseNumber(value);
-    if (parsed === null) return;
+    if (parsed === null) {
+      return;
+    }
     updateDraft((current) => ({ ...current, superfat: clamp(parsed, 0, 20) }));
   };
 
@@ -271,35 +479,49 @@ export function SoapCalculator() {
   const handleOilPercentChange = (oilId: string, value: string) => {
     updateOilDraft(oilId, "percent", value);
     const parsed = parseLooseNumber(value);
-    if (parsed === null) return;
+    if (parsed === null) {
+      return;
+    }
     updateDraft((current) => ({
       ...current,
-      oils: current.oils.map((oil) => (oil.id === oilId ? { ...oil, percent: Math.max(parsed, 0) } : oil)),
+      oils: current.oils.map((oil) =>
+        oil.id === oilId ? { ...oil, percent: Math.max(parsed, 0) } : oil,
+      ),
     }));
   };
 
   const handleOilWeightChange = (oilId: string, value: string) => {
     updateOilDraft(oilId, "weight", value);
     const parsed = parseLooseNumber(value);
-    if (parsed === null) return;
+    if (parsed === null) {
+      return;
+    }
     updateDraft((current) => {
       const weightInGrams = current.unit === "g" ? parsed : parsed * OUNCES_TO_GRAMS;
-      const percent = current.totalOilWeight > 0 ? (weightInGrams / current.totalOilWeight) * 100 : 0;
+      const percent =
+        current.totalOilWeight > 0 ? (weightInGrams / current.totalOilWeight) * 100 : 0;
+
       return {
         ...current,
-        oils: current.oils.map((oil) => (oil.id === oilId ? { ...oil, percent: Math.max(percent, 0) } : oil)),
+        oils: current.oils.map((oil) =>
+          oil.id === oilId ? { ...oil, percent: Math.max(percent, 0) } : oil,
+        ),
       };
     });
   };
 
   const normalizeOilBlur = (oilId: string) => {
     const oil = draftRecipe.oils.find((item) => item.id === oilId);
-    if (!oil) return;
+    if (!oil) {
+      return;
+    }
     setOilDrafts((current) => ({
       ...current,
       [oilId]: {
         percent: trimTrailingZeros(formatPercent(oil.percent)),
-        weight: trimTrailingZeros(formatWeight(draftRecipe.totalOilWeight * (oil.percent / 100), draftRecipe.unit)),
+        weight: trimTrailingZeros(
+          formatWeight(draftRecipe.totalOilWeight * (oil.percent / 100), draftRecipe.unit),
+        ),
       },
     }));
   };
@@ -322,42 +544,67 @@ export function SoapCalculator() {
     if (mode === "percentOfOils") {
       setTopLevelDrafts((current) => ({ ...current, waterPercentOfOils: value }));
       const parsed = parseLooseNumber(value);
-      if (parsed === null) return;
-      updateDraft((current) => ({ ...current, water: { ...current.water, percentOfOils: clamp(parsed, 0, 100) } }));
+      if (parsed === null) {
+        return;
+      }
+      updateDraft((current) => ({
+        ...current,
+        water: { ...current.water, percentOfOils: clamp(parsed, 0, 100) },
+      }));
       return;
     }
 
     if (mode === "lyeConcentration") {
       setTopLevelDrafts((current) => ({ ...current, lyeConcentration: value }));
       const parsed = parseLooseNumber(value);
-      if (parsed === null) return;
-      updateDraft((current) => ({ ...current, water: { ...current.water, lyeConcentration: clamp(parsed / 100, 0.1, 0.95) } }));
+      if (parsed === null) {
+        return;
+      }
+      updateDraft((current) => ({
+        ...current,
+        water: { ...current.water, lyeConcentration: clamp(parsed / 100, 0.1, 0.95) },
+      }));
       return;
     }
 
     setTopLevelDrafts((current) => ({ ...current, waterLyeRatio: value }));
     const parsed = parseRatioInput(value);
-    if (parsed === null) return;
-    updateDraft((current) => ({ ...current, water: { ...current.water, waterLyeRatio: clamp(parsed, 0.5, 5) } }));
+    if (parsed === null) {
+      return;
+    }
+    updateDraft((current) => ({
+      ...current,
+      water: { ...current.water, waterLyeRatio: clamp(parsed, 0.5, 5) },
+    }));
   };
 
   const normalizeWaterBlur = () => {
     setTopLevelDrafts((current) => ({
       ...current,
       waterPercentOfOils: trimTrailingZeros(formatPercent(draftRecipe.water.percentOfOils)),
-      lyeConcentration: trimTrailingZeros(formatPercent(draftRecipe.water.lyeConcentration * 100)),
+      lyeConcentration: trimTrailingZeros(
+        formatPercent(draftRecipe.water.lyeConcentration * 100),
+      ),
       waterLyeRatio: formatRatio(draftRecipe.water.waterLyeRatio),
     }));
   };
 
   const addOil = () => {
-    if (!newOilId || draftRecipe.oils.some((oil) => oil.id === newOilId)) return;
-    setDraftRecipe((current) => ({ ...current, oils: [...current.oils, { id: newOilId, percent: 0 }] }));
+    if (!newOilId || draftRecipe.oils.some((oil) => oil.id === newOilId)) {
+      return;
+    }
+    setDraftRecipe((current) => ({
+      ...current,
+      oils: [...current.oils, { id: newOilId, percent: 0 }],
+    }));
     setOilDrafts((current) => ({ ...current, [newOilId]: { percent: "", weight: "" } }));
   };
 
   const removeOil = (oilId: string) => {
-    setDraftRecipe((current) => ({ ...current, oils: current.oils.filter((oil) => oil.id !== oilId) }));
+    setDraftRecipe((current) => ({
+      ...current,
+      oils: current.oils.filter((oil) => oil.id !== oilId),
+    }));
     setOilDrafts((current) => {
       const next = { ...current };
       delete next[oilId];
@@ -368,6 +615,7 @@ export function SoapCalculator() {
   const resetFormula = () => {
     setDraftRecipe(DEFAULT_RECIPE);
     setCalculatedRecipe(null);
+    setActiveTab("summary");
     syncDraftsFromRecipe(DEFAULT_RECIPE);
     setEntryMode("percent");
   };
@@ -375,6 +623,7 @@ export function SoapCalculator() {
   const loadSample = () => {
     setDraftRecipe(SAMPLE_RECIPE);
     setCalculatedRecipe(null);
+    setActiveTab("summary");
     syncDraftsFromRecipe(SAMPLE_RECIPE);
     setEntryMode("percent");
   };
@@ -387,10 +636,13 @@ export function SoapCalculator() {
 
   const handleCalculate = () => {
     setCalculatedRecipe(sanitizeRecipe(draftRecipe));
+    setActiveTab("summary");
   };
 
   const handleCopy = async () => {
-    if (!result || !calculatedRecipe) return;
+    if (!result || !calculatedRecipe) {
+      return;
+    }
     const lines = [
       calculatedRecipe.recipeName,
       `Total oils: ${formatWeight(result.totals.oilWeight, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
@@ -409,195 +661,189 @@ export function SoapCalculator() {
   };
 
   const handlePrint = () => {
-    if (!calculatedRecipe) return;
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!printWindow) return;
-    printWindow.document.open();
-    printWindow.document.write(buildPrintHtml(calculatedRecipe));
-    printWindow.document.close();
+    if (!calculatedRecipe) {
+      return;
+    }
+    window.print();
   };
 
-  const availableOilOptions = OIL_DATA.filter((oil) => !draftRecipe.oils.some((entry) => entry.id === oil.id));
-  const totalPercentDifference = result ? roundTo(100 - result.totals.percent, 2) : 0;
+  const availableOilOptions = OIL_DATA.filter(
+    (oil) => !draftRecipe.oils.some((entry) => entry.id === oil.id),
+  );
 
   return (
     <main className="lab-shell">
       <div className="mx-auto max-w-5xl space-y-5">
-        <section className="paper-card overflow-hidden p-6 md:p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-xs uppercase tracking-[0.24em] text-[var(--accent-strong)]">Artisan Cold Process Soap Calculator</p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[var(--text)] md:text-5xl">Tallow Be Thy Soap Lab</h1>
-              <p className="mt-3 max-w-xl text-base leading-7 text-[var(--text-soft)]">
-                Enter your formula first, then calculate to generate a recipe summary and a printable batch card.
-              </p>
-            </div>
-            {result ? (
-              <div className="no-print flex flex-wrap gap-3">
-                <button type="button" onClick={handleCopy} className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-strong)]">
-                  Copy results
-                </button>
-                <button type="button" onClick={handlePrint} className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] px-4 py-3 text-sm font-medium text-[var(--text)]">
-                  Open print card
-                </button>
-              </div>
-            ) : null}
-          </div>
-          {copyMessage ? <p className="mt-4 text-sm text-[var(--accent-strong)]">{copyMessage}</p> : null}
+        <section className="paper-card p-6 md:p-8 print-hidden">
+          <p className="text-xs uppercase tracking-[0.24em] text-[var(--accent-strong)]">
+            Artisan Cold Process Soap Calculator
+          </p>
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[var(--text)] md:text-5xl">
+            Tallow Be Thy Soap Lab
+          </h1>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--text-soft)]">
+            Enter your formula, calculate when you are ready, then review or print a clean recipe card.
+          </p>
         </section>
 
-        <Card title="Batch setup" subtitle="Set your batch inputs first, then calculate when you're ready.">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Recipe name">
-              <TextInput value={topLevelDrafts.recipeName} onChange={(event) => handleRecipeName(event.target.value)} />
-            </Field>
-            <Field label="Total oils" hint={draftRecipe.unit === "g" ? "grams" : "ounces"}>
-              <TextInput inputMode="decimal" value={topLevelDrafts.totalOilWeight} onChange={(event) => handleTotalOilWeightChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix={draftRecipe.unit} />
-            </Field>
-            <Field label="Unit">
-              <div className="grid grid-cols-2 gap-2">
-                {(["g", "oz"] as const).map((unit) => (
-                  <button key={unit} type="button" className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium uppercase" data-active={draftRecipe.unit === unit} onClick={() => handleUnitChange(unit)}>
-                    {unit}
-                  </button>
-                ))}
-              </div>
-            </Field>
-            <Field label="Superfat">
-              <TextInput inputMode="decimal" value={topLevelDrafts.superfat} onChange={(event) => handleSuperfatChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix="%" />
-            </Field>
-            <Field label="Fragrance">
-              <TextInput inputMode="decimal" value={topLevelDrafts.fragranceWeight} onChange={(event) => handleFragranceWeightChange(event.target.value)} onBlur={normalizeTopLevelBlur} placeholder="0" suffix={draftRecipe.unit} />
-            </Field>
-          </div>
-
-          <div className="mt-5">
-            <Field label="Recipe actions">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <button type="button" onClick={resetFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Reset</button>
-                <button type="button" onClick={loadSample} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Load sample</button>
-                <button type="button" onClick={normalizeFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Normalize to 100%</button>
-              </div>
-            </Field>
-          </div>
-        </Card>
-
-        <Card title="Oil composition" subtitle="Build the formula by percentage or by weight.">
-          <div className="no-print mb-5 flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 md:flex-row md:items-end">
-            <Field label="Add oil" className="flex-1">
-              <Select value={newOilId} onChange={(event) => setNewOilId(event.target.value)}>
-                {availableOilOptions.length === 0 ? <option value="">All available oils added</option> : availableOilOptions.map((oil) => <option key={oil.id} value={oil.id}>{oil.name}</option>)}
-              </Select>
-            </Field>
-            <button type="button" onClick={addOil} disabled={availableOilOptions.length === 0} className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">
-              Add oil
-            </button>
-            <Field label="Entry mode" className="md:w-72">
-              <div className="grid grid-cols-2 gap-2">
-                {(["percent", "weight"] as const).map((mode) => (
-                  <button key={mode} type="button" className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium capitalize" data-active={entryMode === mode} onClick={() => setEntryMode(mode)}>
-                    {mode}
-                  </button>
-                ))}
-              </div>
-            </Field>
-          </div>
-
-          <div className="table-grid">
-            {draftRecipe.oils.map((oil) => {
-              const definition = OIL_MAP.get(oil.id);
-              if (!definition) return null;
-              const draft = oilDrafts[oil.id] ?? { percent: "", weight: "" };
-              return (
-                <div key={oil.id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] md:items-end">
-                    <div>
-                      <p className="text-base font-semibold text-[var(--text)]">{definition.name}</p>
-                      <p className="mt-1 text-sm text-[var(--text-soft)]">NaOH SAP: {definition.sapNaoh}</p>
-                    </div>
-                    <Field label="Percent">
-                      <TextInput inputMode="decimal" value={draft.percent} onChange={(event) => handleOilPercentChange(oil.id, event.target.value)} onBlur={() => normalizeOilBlur(oil.id)} suffix="%" />
-                    </Field>
-                    <Field label={`Weight (${draftRecipe.unit})`}>
-                      <TextInput inputMode="decimal" value={draft.weight} onChange={(event) => handleOilWeightChange(oil.id, event.target.value)} onBlur={() => normalizeOilBlur(oil.id)} suffix={draftRecipe.unit} />
-                    </Field>
-                    <button type="button" onClick={() => removeOil(oil.id)} className="rounded-2xl border border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--danger)]">
-                      Remove
+        <div className="space-y-5 print-hidden">
+          <Card title="Batch setup" subtitle="Set your batch inputs first, then calculate when you're ready.">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Recipe name">
+                <TextInput value={topLevelDrafts.recipeName} onChange={(event) => handleRecipeName(event.target.value)} />
+              </Field>
+              <Field label="Total oils" hint={draftRecipe.unit === "g" ? "grams" : "ounces"}>
+                <TextInput inputMode="decimal" value={topLevelDrafts.totalOilWeight} onChange={(event) => handleTotalOilWeightChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix={draftRecipe.unit} />
+              </Field>
+              <Field label="Unit">
+                <div className="grid grid-cols-2 gap-2">
+                  {(["g", "oz"] as const).map((unit) => (
+                    <button key={unit} type="button" className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium uppercase" data-active={draftRecipe.unit === unit} onClick={() => handleUnitChange(unit)}>
+                      {unit}
                     </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card title="Water settings" subtitle="Choose one water method and keep the others in sync.">
-          <Field label="Water calculation mode">
-            <SegmentedControl
-              value={draftRecipe.water.mode}
-              onChange={handleWaterModeChange}
-              options={[
-                { value: "percentOfOils", label: "Water % of oils" },
-                { value: "lyeConcentration", label: "Lye concentration" },
-                { value: "waterLyeRatio", label: "Water : lye ratio" },
-              ]}
-            />
-          </Field>
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
-            <Field label="Water as % of oils">
-              <TextInput inputMode="decimal" value={topLevelDrafts.waterPercentOfOils} onChange={(event) => handleWaterValueChange("percentOfOils", event.target.value)} onBlur={normalizeWaterBlur} suffix="%" />
-            </Field>
-            <Field label="Lye concentration">
-              <TextInput inputMode="decimal" value={topLevelDrafts.lyeConcentration} onChange={(event) => handleWaterValueChange("lyeConcentration", event.target.value)} onBlur={normalizeWaterBlur} suffix="%" />
-            </Field>
-            <Field label="Water : lye ratio">
-              <TextInput inputMode="text" value={topLevelDrafts.waterLyeRatio} onChange={(event) => handleWaterValueChange("waterLyeRatio", event.target.value)} onBlur={normalizeWaterBlur} placeholder="2:1" />
-            </Field>
-          </div>
-        </Card>
-
-        <div className="no-print flex justify-center">
-          <button type="button" onClick={handleCalculate} className="rounded-2xl bg-[var(--accent)] px-8 py-4 text-base font-medium text-white transition hover:bg-[var(--accent-strong)]">
-            Calculate recipe
-          </button>
-        </div>
-
-        {result && calculatedRecipe ? (
-          <>
-            <Card title="Formula summary" subtitle="Calculated results from the current saved input set.">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Stat label="Total oils" value={`${formatWeight(result.totals.oilWeight, calculatedRecipe.unit)} ${calculatedRecipe.unit}`} />
-                <Stat label="NaOH" value={`${formatWeight(result.totals.lyeAmount, calculatedRecipe.unit)} ${calculatedRecipe.unit}`} />
-                <Stat label="Water" value={`${formatWeight(result.totals.waterAmount, calculatedRecipe.unit)} ${calculatedRecipe.unit}`} />
-                <Stat label="Fragrance" value={`${formatWeight(result.totals.fragranceWeight, calculatedRecipe.unit)} ${calculatedRecipe.unit}`} hint="Optional" />
-                <Stat label="Total batch" value={`${formatWeight(result.totals.totalBatch, calculatedRecipe.unit)} ${calculatedRecipe.unit}`} hint="Before cure" />
-                <Stat label="Percent total" value={`${formatPercent(result.totals.percent)}%`} hint={totalPercentDifference === 0 ? "Balanced at 100%" : `${totalPercentDifference > 0 ? "Missing" : "Over by"} ${Math.abs(totalPercentDifference).toFixed(2)}%`} />
-              </div>
-            </Card>
-
-            <Card title="Soap qualities" subtitle="Estimated from weighted oil profile data.">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {Object.entries(result.qualities).map(([key, value]) => <Stat key={key} label={key} value={roundTo(value, 2).toFixed(2)} />)}
-              </div>
-            </Card>
-
-            <Card title="Warnings and notes" subtitle="Useful formulation flags before you make the batch.">
-              {result.warnings.length === 0 ? (
-                <p className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--text-soft)]">
-                  No warning flags at the moment. This formula is balanced and ready for a print card.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {result.warnings.map((warning) => (
-                    <div key={warning} className="rounded-3xl border border-[rgba(149,109,47,0.18)] bg-[rgba(255,247,232,0.82)] p-4 text-sm leading-6 text-[var(--warning)]">
-                      {warning}
-                    </div>
                   ))}
                 </div>
-              )}
-            </Card>
-          </>
-        ) : null}
+              </Field>
+              <Field label="Superfat">
+                <TextInput inputMode="decimal" value={topLevelDrafts.superfat} onChange={(event) => handleSuperfatChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix="%" />
+              </Field>
+              <Field label="Fragrance">
+                <TextInput inputMode="decimal" value={topLevelDrafts.fragranceWeight} onChange={(event) => handleFragranceWeightChange(event.target.value)} onBlur={normalizeTopLevelBlur} placeholder="0" suffix={draftRecipe.unit} />
+              </Field>
+            </div>
+
+            <div className="mt-5">
+              <Field label="Recipe actions">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <button type="button" onClick={resetFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Reset</button>
+                  <button type="button" onClick={loadSample} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Load sample</button>
+                  <button type="button" onClick={normalizeFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Normalize to 100%</button>
+                </div>
+              </Field>
+            </div>
+          </Card>
+
+          <Card title="Oil composition" subtitle="Build the formula by percentage or by weight.">
+            <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 md:flex-row md:items-end">
+              <Field label="Add oil" className="flex-1">
+                <Select value={newOilId} onChange={(event) => setNewOilId(event.target.value)}>
+                  {availableOilOptions.length === 0 ? <option value="">All available oils added</option> : availableOilOptions.map((oil) => <option key={oil.id} value={oil.id}>{oil.name}</option>)}
+                </Select>
+              </Field>
+              <button type="button" onClick={addOil} disabled={availableOilOptions.length === 0} className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">
+                Add oil
+              </button>
+              <Field label="Entry mode" className="md:w-72">
+                <div className="grid grid-cols-2 gap-2">
+                  {(["percent", "weight"] as const).map((mode) => (
+                    <button key={mode} type="button" className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium capitalize" data-active={entryMode === mode} onClick={() => setEntryMode(mode)}>
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+
+            <div className="table-grid">
+              {draftRecipe.oils.map((oil) => {
+                const definition = OIL_MAP.get(oil.id);
+                if (!definition) return null;
+                const draft = oilDrafts[oil.id] ?? { percent: "", weight: "" };
+
+                return (
+                  <div key={oil.id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] md:items-end">
+                      <div>
+                        <p className="text-base font-semibold text-[var(--text)]">{definition.name}</p>
+                        <p className="mt-1 text-sm text-[var(--text-soft)]">NaOH SAP: {definition.sapNaoh}</p>
+                      </div>
+                      <Field label="Percent">
+                        <TextInput inputMode="decimal" value={draft.percent} onChange={(event) => handleOilPercentChange(oil.id, event.target.value)} onBlur={() => normalizeOilBlur(oil.id)} suffix="%" />
+                      </Field>
+                      <Field label={`Weight (${draftRecipe.unit})`}>
+                        <TextInput inputMode="decimal" value={draft.weight} onChange={(event) => handleOilWeightChange(oil.id, event.target.value)} onBlur={() => normalizeOilBlur(oil.id)} suffix={draftRecipe.unit} />
+                      </Field>
+                      <button type="button" onClick={() => removeOil(oil.id)} className="rounded-2xl border border-[var(--border)] px-4 py-3 text-sm font-medium text-[var(--danger)]">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card title="Water settings" subtitle="Choose one water method and keep the others in sync.">
+            <Field label="Water calculation mode">
+              <SegmentedControl
+                value={draftRecipe.water.mode}
+                onChange={handleWaterModeChange}
+                options={[
+                  { value: "percentOfOils", label: "Water % of oils" },
+                  { value: "lyeConcentration", label: "Lye concentration" },
+                  { value: "waterLyeRatio", label: "Water : lye ratio" },
+                ]}
+              />
+            </Field>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <Field label="Water as % of oils">
+                <TextInput inputMode="decimal" value={topLevelDrafts.waterPercentOfOils} onChange={(event) => handleWaterValueChange("percentOfOils", event.target.value)} onBlur={normalizeWaterBlur} suffix="%" />
+              </Field>
+              <Field label="Lye concentration">
+                <TextInput inputMode="decimal" value={topLevelDrafts.lyeConcentration} onChange={(event) => handleWaterValueChange("lyeConcentration", event.target.value)} onBlur={normalizeWaterBlur} suffix="%" />
+              </Field>
+              <Field label="Water : lye ratio">
+                <TextInput inputMode="text" value={topLevelDrafts.waterLyeRatio} onChange={(event) => handleWaterValueChange("waterLyeRatio", event.target.value)} onBlur={normalizeWaterBlur} placeholder="2:1" />
+              </Field>
+            </div>
+          </Card>
+
+          <section className="paper-card p-5 md:p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight text-[var(--text)]">Calculate and Review</h2>
+                <p className="mt-1 text-sm text-[var(--text-soft)]">Run the formula, then copy or print the recipe card.</p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button type="button" onClick={handleCalculate} className="rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-strong)]">
+                  Calculate recipe
+                </button>
+                <button type="button" onClick={handleCopy} disabled={!result} className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 py-3 text-sm font-medium text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50">
+                  Copy results
+                </button>
+                <button type="button" onClick={handlePrint} disabled={!result} className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 py-3 text-sm font-medium text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50">
+                  Print card
+                </button>
+              </div>
+            </div>
+            {copyMessage ? <p className="mt-3 text-sm text-[var(--accent-strong)]">{copyMessage}</p> : null}
+          </section>
+
+          {result && calculatedRecipe ? (
+            <section className="paper-card results-card p-5 md:p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">Calculated recipe</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text)]">{calculatedRecipe.recipeName}</h2>
+                  <p className="mt-1 text-sm text-[var(--text-soft)]">Review the formula, then print a clean batch card when you are ready.</p>
+                </div>
+                <div className="result-tab-row">
+                  <ResultTabButton active={activeTab === "summary"} label="Formula Summary" onClick={() => setActiveTab("summary")} />
+                  <ResultTabButton active={activeTab === "qualities"} label="Soap Qualities" onClick={() => setActiveTab("qualities")} />
+                  <ResultTabButton active={activeTab === "warnings"} label="Warnings & Notes" onClick={() => setActiveTab("warnings")} />
+                </div>
+              </div>
+
+              <div className="mt-5 results-panel">
+                {activeTab === "summary" ? <SummaryTab recipe={calculatedRecipe} result={result} /> : null}
+                {activeTab === "qualities" ? <QualitiesTab result={result} /> : null}
+                {activeTab === "warnings" ? <WarningsTab result={result} /> : null}
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        {result && calculatedRecipe ? <PrintRecipeCard recipe={calculatedRecipe} result={result} /> : null}
       </div>
     </main>
   );

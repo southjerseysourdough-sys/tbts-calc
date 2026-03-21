@@ -134,6 +134,35 @@ select {
   display: none;
 }
 
+.result-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.result-tab {
+  border: 1px solid var(--border);
+  background: rgba(255, 251, 245, 0.72);
+  color: var(--text-soft);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.result-tab[data-active="true"] {
+  border-color: rgba(143, 103, 70, 0.36);
+  background: rgba(143, 103, 70, 0.14);
+  color: var(--accent-strong);
+}
+
+.results-panel {
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: rgba(255, 252, 248, 0.74);
+  padding: 18px;
+}
+
 .dot-leader-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -155,6 +184,75 @@ select {
   order: 3;
 }
 
+.print-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #7b5e43;
+}
+
+.print-title {
+  margin: 10px 0 6px;
+  font-size: 42px;
+  line-height: 1;
+  color: #2d2119;
+}
+
+.print-subtitle {
+  margin: 0;
+  color: #6f5a49;
+  font-size: 16px;
+}
+
+.print-section {
+  margin-top: 26px;
+}
+
+.print-section h2 {
+  margin: 0 0 12px;
+  color: #7b5e43;
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.print-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.print-grid span {
+  display: block;
+  color: #6f5a49;
+  font-size: 13px;
+}
+
+.print-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #2d2119;
+  font-size: 18px;
+}
+
+.print-row {
+  color: #2d2119;
+  font-size: 15px;
+}
+
+.print-note,
+.print-list {
+  margin: 0;
+  color: #2d2119;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.print-list {
+  padding-left: 20px;
+}
+
 @media (min-width: 1024px) {
   .lab-grid {
     grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -168,26 +266,38 @@ select {
     background: white;
   }
 
+  .print-hidden {
+    display: none !important;
+  }
+
   .lab-shell {
     padding: 0;
   }
 
-  .paper-card {
-    box-shadow: none;
-    backdrop-filter: none;
-    background: white;
+  body {
+    font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+    color: #2d2119;
   }
 
-  .no-print {
-    display: none !important;
+  .lab-shell > div {
+    max-width: 100%;
   }
 
   .recipe-print-card {
     display: block;
-    border: 1px solid #bda88d;
+    border: 1px solid #d2bea4;
     border-radius: 18px;
-    padding: 20px;
+    padding: 24px;
     background: white;
-    margin-top: 20px;
+    box-shadow: none;
+    margin: 0;
+  }
+
+  .dot-leader-row::before {
+    border-bottom-color: #baa286;
+  }
+
+  .print-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
