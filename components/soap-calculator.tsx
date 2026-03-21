@@ -266,18 +266,18 @@ function SocialIcon({
 }
 
 function ThemeToggle() {
-  const { resolvedTheme, toggleTheme } = useTheme();
-  const nextLabel = resolvedTheme === "dark" ? "Light mode" : "Dark mode";
+  const { resolvedTheme, setTheme } = useTheme();
 
   return (
-    <button
-      type="button"
-      onClick={toggleTheme}
-      className="theme-toggle"
-      aria-label={`Switch to ${nextLabel.toLowerCase()}`}
-    >
-      <span className="theme-toggle__icon" aria-hidden="true">
-        {resolvedTheme === "dark" ? (
+    <div className="theme-toggle" role="group" aria-label="Color theme">
+      <button
+        type="button"
+        onClick={() => setTheme("light")}
+        className="theme-toggle__option"
+        data-active={resolvedTheme === "light"}
+        aria-pressed={resolvedTheme === "light"}
+      >
+        <span className="theme-toggle__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path
               d="M12 3v2.25M12 18.75V21M4.93 4.93l1.6 1.6M17.47 17.47l1.6 1.6M3 12h2.25M18.75 12H21M4.93 19.07l1.6-1.6M17.47 6.53l1.6-1.6"
@@ -285,14 +285,24 @@ function ThemeToggle() {
             />
             <circle cx="12" cy="12" r="4.25" />
           </svg>
-        ) : (
+        </span>
+        <span>Light</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setTheme("dark")}
+        className="theme-toggle__option"
+        data-active={resolvedTheme === "dark"}
+        aria-pressed={resolvedTheme === "dark"}
+      >
+        <span className="theme-toggle__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M20.77 15.12A8.26 8.26 0 0 1 8.88 3.23a.75.75 0 0 0-.94-.94A9.76 9.76 0 1 0 21.71 16.06a.75.75 0 0 0-.94-.94Z" />
           </svg>
-        )}
-      </span>
-      <span>{nextLabel}</span>
-    </button>
+        </span>
+        <span>Dark</span>
+      </button>
+    </div>
   );
 }
 
