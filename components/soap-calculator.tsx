@@ -19,7 +19,7 @@ import {
   parseRatioInput,
   roundTo,
 } from "@/lib/calculations";
-import { DEFAULT_RECIPE, SAMPLE_RECIPE, STORAGE_KEY } from "@/lib/defaults";
+import { DEFAULT_RECIPE, EMPTY_RECIPE, SAMPLE_RECIPE, STORAGE_KEY } from "@/lib/defaults";
 import { OIL_DATA, OIL_MAP } from "@/lib/oil-data";
 import { EntryMode, RecipeState, SoapCalculationResult, WaterMode } from "@/lib/types";
 
@@ -27,6 +27,9 @@ type OilDraftMap = Record<string, { percent: string; weight: string }>;
 type ResultTab = "summary" | "qualities" | "warnings";
 
 const OUNCES_TO_GRAMS = 28.349523125;
+const HOMEPAGE_URL = "https://tallowbethysoap.com/";
+const SHARE_URL = "https://calc.tallowbethysoap.com/";
+const SHARE_TEXT = "Tallow Be Thy Soap Lab | Cold process soap calculator";
 
 function trimTrailingZeros(value: string) {
   return value.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
@@ -137,6 +140,28 @@ function ResultTabButton({
     >
       {label}
     </button>
+  );
+}
+
+function SocialIcon({
+  children,
+  label,
+  href,
+}: {
+  children: React.ReactNode;
+  label: string;
+  href: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      className="pill-toggle inline-flex h-11 w-11 items-center justify-center rounded-2xl"
+    >
+      <span className="h-5 w-5 text-[var(--accent-strong)]">{children}</span>
+    </a>
   );
 }
 
@@ -620,6 +645,15 @@ export function SoapCalculator() {
     setEntryMode("percent");
   };
 
+  const clearAllFields = () => {
+    setDraftRecipe(EMPTY_RECIPE);
+    setCalculatedRecipe(null);
+    setActiveTab("summary");
+    syncDraftsFromRecipe(EMPTY_RECIPE);
+    setEntryMode("percent");
+    setNewOilId("shea-butter");
+  };
+
   const loadSample = () => {
     setDraftRecipe(SAMPLE_RECIPE);
     setCalculatedRecipe(null);
@@ -660,6 +694,46 @@ export function SoapCalculator() {
     }
   };
 
+  const handleEmail = () => {
+    if (!result || !calculatedRecipe) {
+      return;
+    }
+
+    const subject = encodeURIComponent(
+      `${calculatedRecipe.recipeName || "Soap recipe"} | Tallow Be Thy Soap Lab`,
+    );
+
+    const bodyLines = [
+      calculatedRecipe.recipeName || "Soap recipe",
+      "",
+      `Total oils: ${formatWeight(result.totals.oilWeight, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
+      `Superfat: ${formatPercent(calculatedRecipe.superfat)}%`,
+      `Water setting: ${getWaterModeLabel(calculatedRecipe, result)}`,
+      `NaOH: ${formatWeight(result.totals.lyeAmount, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
+      `Water: ${formatWeight(result.totals.waterAmount, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
+      `Fragrance: ${formatWeight(result.totals.fragranceWeight, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
+      `Total batch: ${formatWeight(result.totals.totalBatch, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
+      "",
+      "Oil breakdown:",
+      ...result.oils.map(
+        (oil) =>
+          `- ${oil.name}: ${formatPercent(oil.percent)}% / ${formatWeight(oil.weight, calculatedRecipe.unit)} ${calculatedRecipe.unit}`,
+      ),
+      "",
+      "Soap qualities:",
+      ...Object.entries(result.qualities).map(
+        ([key, value]) => `- ${key}: ${roundTo(value, 2).toFixed(2)}`,
+      ),
+      "",
+      "Warnings and notes:",
+      ...(result.warnings.length > 0
+        ? result.warnings.map((warning) => `- ${warning}`)
+        : ["- No warning flags."]),
+    ];
+
+    window.location.href = `mailto:?subject=${subject}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+  };
+
   const handlePrint = () => {
     if (!calculatedRecipe) {
       return;
@@ -675,15 +749,67 @@ export function SoapCalculator() {
     <main className="lab-shell">
       <div className="mx-auto max-w-5xl space-y-5">
         <section className="paper-card p-6 md:p-8 print-hidden">
-          <p className="text-xs uppercase tracking-[0.24em] text-[var(--accent-strong)]">
-            Artisan Cold Process Soap Calculator
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[var(--text)] md:text-5xl">
-            Tallow Be Thy Soap Lab
-          </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--text-soft)]">
-            Enter your formula, calculate when you are ready, then review or print a clean recipe card.
-          </p>
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-2xl">
+              <a
+                href={HOMEPAGE_URL}
+                className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-strong)] transition hover:text-[var(--accent)]"
+              >
+                <span aria-hidden="true">←</span>
+                <span>Back to tallowbethysoap.com</span>
+              </a>
+              <p className="mt-4 text-xs uppercase tracking-[0.24em] text-[var(--accent-strong)]">
+                Artisan Cold Process Soap Calculator
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[var(--text)] md:text-5xl">
+                Tallow Be Thy Soap Lab
+              </h1>
+              <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--text-soft)]">
+                Enter your formula, calculate when you are ready, then review or print a clean recipe card.
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 md:min-w-64">
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                Share this calculator
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SocialIcon
+                  label="Share on Facebook"
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}`}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13.5 21v-8.1h2.7l.4-3.2h-3.1V7.66c0-.93.26-1.56 1.59-1.56H16.6V3.24c-.27-.04-1.2-.12-2.28-.12-2.25 0-3.79 1.37-3.79 3.89v2.16H8v3.2h2.53V21h2.97Z" />
+                  </svg>
+                </SocialIcon>
+                <SocialIcon
+                  label="Share on X"
+                  href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(SHARE_TEXT)}`}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.9 2H22l-6.77 7.74L23 22h-6.1l-4.78-6.97L6.02 22H2.9l7.24-8.27L1 2h6.26l4.32 6.32L18.9 2Zm-1.07 18h1.7L6.33 3.9H4.5L17.83 20Z" />
+                  </svg>
+                </SocialIcon>
+                <SocialIcon
+                  label="Share on Pinterest"
+                  href={`https://pinterest.com/pin/create/button/?url=${encodeURIComponent(SHARE_URL)}&description=${encodeURIComponent(SHARE_TEXT)}`}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2a10 10 0 0 0-3.64 19.31c-.05-1.64-.01-3.61.43-5.46l1.33-5.63S9.8 9.58 9.8 8.66c0-1.42.82-2.48 1.85-2.48.87 0 1.29.65 1.29 1.43 0 .87-.55 2.18-.84 3.39-.24 1.01.51 1.83 1.51 1.83 1.82 0 3.04-2.34 3.04-5.12 0-2.11-1.42-3.69-4.01-3.69-2.92 0-4.74 2.18-4.74 4.62 0 .84.25 1.44.65 1.9.18.21.21.29.14.53-.05.18-.15.6-.2.77-.07.26-.28.35-.52.25-1.46-.59-2.14-2.18-2.14-3.97 0-2.96 2.49-6.52 7.44-6.52 3.98 0 6.6 2.88 6.6 5.97 0 4.09-2.27 7.14-5.62 7.14-1.12 0-2.16-.61-2.52-1.29l-.69 2.73c-.42 1.7-1.25 3.4-2.01 4.72A10 10 0 1 0 12 2Z" />
+                  </svg>
+                </SocialIcon>
+                <SocialIcon
+                  label="Share by email"
+                  href={`mailto:?subject=${encodeURIComponent(SHARE_TEXT)}&body=${encodeURIComponent(`Take a look at the Tallow Be Thy Soap Lab calculator: ${SHARE_URL}`)}`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 6h16v12H4z" />
+                    <path d="m4 7 8 6 8-6" />
+                  </svg>
+                </SocialIcon>
+              </div>
+            </div>
+          </div>
         </section>
 
         <div className="space-y-5 print-hidden">
@@ -720,6 +846,12 @@ export function SoapCalculator() {
                   <button type="button" onClick={normalizeFormula} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">Normalize to 100%</button>
                 </div>
               </Field>
+            </div>
+
+            <div className="mt-3">
+              <button type="button" onClick={clearAllFields} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">
+                Clear all fields
+              </button>
             </div>
           </Card>
 
@@ -810,6 +942,9 @@ export function SoapCalculator() {
                 </button>
                 <button type="button" onClick={handleCopy} disabled={!result} className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 py-3 text-sm font-medium text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50">
                   Copy results
+                </button>
+                <button type="button" onClick={handleEmail} disabled={!result} className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 py-3 text-sm font-medium text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50">
+                  Email recipe
                 </button>
                 <button type="button" onClick={handlePrint} disabled={!result} className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] px-5 py-3 text-sm font-medium text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50">
                   Print card

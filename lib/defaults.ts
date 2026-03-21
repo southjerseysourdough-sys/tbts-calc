@@ -19,6 +19,21 @@ export const DEFAULT_RECIPE: RecipeState = {
   ],
 };
 
+export const EMPTY_RECIPE: RecipeState = {
+  recipeName: "",
+  totalOilWeight: 0,
+  fragranceWeight: 0,
+  unit: "g",
+  superfat: 0,
+  water: {
+    mode: "lyeConcentration",
+    percentOfOils: 33,
+    lyeConcentration: 0.33,
+    waterLyeRatio: 2.03,
+  },
+  oils: [],
+};
+
 export const SAMPLE_RECIPE: RecipeState = {
   recipeName: "Workshop Conditioning Bar",
   totalOilWeight: 1200,
