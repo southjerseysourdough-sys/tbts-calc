@@ -1,53 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5efe4;
-  --background-deep: #ede2d0;
-  --surface: rgba(255, 251, 245, 0.82);
-  --surface-strong: rgba(255, 250, 242, 0.94);
-  --surface-muted: rgba(245, 236, 223, 0.72);
-  --surface-elevated: rgba(255, 248, 239, 0.96);
-  --border: rgba(112, 84, 56, 0.14);
-  --border-strong: rgba(112, 84, 56, 0.22);
-  --text: #34271e;
-  --text-soft: #6f5a49;
+  --background: #f2ebdf;
+  --background-deep: #e7dbc8;
+  --surface: rgba(250, 244, 236, 0.84);
+  --surface-strong: rgba(252, 247, 240, 0.95);
+  --surface-muted: rgba(241, 231, 217, 0.82);
+  --surface-elevated: rgba(255, 249, 242, 0.97);
+  --border: rgba(128, 96, 66, 0.16);
+  --border-strong: rgba(128, 96, 66, 0.24);
+  --text: #37281e;
+  --text-soft: #6b5643;
   --accent: #8f6746;
   --accent-strong: #725035;
   --accent-soft: #d9c1a5;
   --danger: #8f4d42;
   --warning: #956d2f;
-  --warning-surface: rgba(255, 247, 232, 0.82);
-  --warning-border: rgba(149, 109, 47, 0.18);
-  --footer-surface: rgba(255, 248, 239, 0.78);
+  --warning-surface: rgba(251, 241, 224, 0.86);
+  --warning-border: rgba(149, 109, 47, 0.2);
+  --footer-surface: rgba(247, 240, 231, 0.82);
   --overlay: rgba(52, 39, 30, 0.34);
-  --theme-chip: rgba(248, 238, 225, 0.76);
-  --theme-chip-hover: rgba(250, 242, 232, 0.92);
-  --theme-segment: rgba(255, 249, 242, 0.32);
-  --theme-segment-hover: rgba(255, 248, 240, 0.54);
+  --theme-chip: rgba(243, 233, 220, 0.78);
+  --theme-chip-hover: rgba(247, 239, 228, 0.92);
+  --theme-segment: rgba(252, 246, 239, 0.56);
+  --theme-segment-hover: rgba(249, 241, 231, 0.82);
   --theme-active-bg: linear-gradient(180deg, rgba(163, 120, 83, 0.2), rgba(143, 103, 70, 0.3));
   --theme-active-border: rgba(143, 103, 70, 0.24);
   --theme-active-text: #5b3f29;
   --theme-inactive-text: #7f6651;
-  --control-group-bg: rgba(248, 238, 225, 0.72);
-  --control-group-border: rgba(112, 84, 56, 0.14);
-  --control-group-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --control-bg: rgba(255, 251, 245, 0.68);
-  --control-hover-bg: rgba(255, 248, 240, 0.9);
-  --control-border: rgba(112, 84, 56, 0.16);
-  --control-border-hover: rgba(112, 84, 56, 0.28);
-  --control-text: #6f5a49;
-  --control-text-hover: #34271e;
-  --control-active-bg: linear-gradient(180deg, rgba(214, 191, 165, 0.88), rgba(196, 166, 133, 0.96));
-  --control-active-border: rgba(143, 103, 70, 0.28);
-  --control-active-text: #4b3422;
+  --control-group-bg: rgba(243, 233, 219, 0.76);
+  --control-group-border: rgba(128, 96, 66, 0.15);
+  --control-group-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.24);
+  --control-bg: linear-gradient(180deg, rgba(250, 244, 236, 0.9), rgba(245, 236, 225, 0.92));
+  --control-hover-bg: linear-gradient(180deg, rgba(252, 247, 241, 0.96), rgba(246, 238, 228, 0.98));
+  --control-border: rgba(128, 96, 66, 0.17);
+  --control-border-hover: rgba(128, 96, 66, 0.28);
+  --control-text: #6c5643;
+  --control-text-hover: #37281e;
+  --control-active-bg: linear-gradient(180deg, rgba(224, 204, 179, 0.96), rgba(208, 182, 151, 0.98));
+  --control-active-border: rgba(143, 103, 70, 0.24);
+  --control-active-text: #4b3423;
   --control-active-shadow:
-    0 8px 18px rgba(78, 56, 31, 0.1),
-    inset 0 1px 0 rgba(255, 252, 247, 0.45),
-    inset 0 -1px 0 rgba(126, 89, 59, 0.14);
+    0 8px 18px rgba(96, 70, 42, 0.09),
+    inset 0 1px 0 rgba(255, 251, 245, 0.5),
+    inset 0 -1px 0 rgba(132, 96, 64, 0.12);
   --focus-ring: rgba(143, 103, 70, 0.12);
-  --glow-left: rgba(255, 255, 255, 0.52);
-  --glow-right: rgba(205, 177, 142, 0.18);
-  --shadow: 0 18px 45px rgba(78, 56, 31, 0.08);
+  --glow-left: rgba(255, 249, 241, 0.54);
+  --glow-right: rgba(201, 171, 135, 0.16);
+  --shadow: 0 18px 45px rgba(96, 70, 42, 0.07);
   --radius-xl: 24px;
   --radius-lg: 18px;
 }
@@ -133,7 +133,7 @@ body {
   position: relative;
   overflow-x: hidden;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2)),
+    linear-gradient(rgba(255, 250, 245, 0.18), rgba(255, 250, 245, 0.18)),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
   transition:
     background-color 240ms ease,
@@ -253,8 +253,8 @@ select {
 .lab-shell::before {
   height: 48vh;
   background:
-    radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.58), transparent 38%),
-    radial-gradient(circle at 84% 18%, rgba(209, 178, 143, 0.26), transparent 24%);
+    radial-gradient(circle at 18% 28%, rgba(255, 250, 244, 0.58), transparent 38%),
+    radial-gradient(circle at 84% 18%, rgba(210, 183, 149, 0.2), transparent 24%);
   transform: translate3d(calc(var(--parallax-x) * 0.35), calc(var(--parallax-y) * 0.35), 0);
 }
 
@@ -265,7 +265,7 @@ select {
   max-width: 520px;
   max-height: 520px;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 244, 229, 0.34) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(249, 236, 216, 0.28) 0%, transparent 70%);
   filter: blur(18px);
   opacity: 0.9;
   transform: translate3d(calc(var(--parallax-x) * -0.28), calc(var(--parallax-y) * -0.22), 0);
@@ -329,8 +329,8 @@ select {
 }
 
 .paper-card:hover {
-  box-shadow: 0 22px 48px rgba(78, 56, 31, 0.1);
-  border-color: rgba(112, 84, 56, 0.18);
+  box-shadow: 0 22px 48px rgba(96, 70, 42, 0.085);
+  border-color: rgba(128, 96, 66, 0.2);
 }
 
 .theme-toggle {
@@ -435,14 +435,16 @@ select {
 }
 
 .field-input::placeholder {
-  color: #a28b75;
+  color: #9f876f;
 }
 
 .pill-toggle {
   border: 1px solid var(--control-border);
   background: var(--control-bg);
   color: var(--control-text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 252, 247, 0.36),
+    0 1px 0 rgba(171, 140, 108, 0.04);
   transition:
     background-color 160ms ease,
     color 160ms ease,
@@ -456,7 +458,7 @@ select {
   border-color: var(--control-border-hover);
   color: var(--control-text-hover);
   transform: translateY(-1px);
-  box-shadow: 0 8px 16px rgba(24, 16, 13, 0.08);
+  box-shadow: 0 8px 16px rgba(96, 70, 42, 0.08);
 }
 
 .pill-toggle:focus-visible,
@@ -491,8 +493,8 @@ select {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 82%, transparent), color-mix(in srgb, var(--surface-strong) 88%, transparent));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 10px 24px rgba(24, 16, 13, 0.08);
+    inset 0 1px 0 rgba(255, 251, 245, 0.2),
+    0 10px 24px rgba(96, 70, 42, 0.07);
 }
 
 .share-module__actions {
@@ -515,7 +517,7 @@ select {
 
 .metric-panel {
   border: 1px solid var(--border);
-  background: rgba(255, 252, 248, 0.7);
+  background: rgba(248, 241, 232, 0.76);
 }
 
 .table-grid {
