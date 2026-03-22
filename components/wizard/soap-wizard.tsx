@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { DisclaimerModal } from "@/components/disclaimer-modal";
 import { EntryGateScreen } from "@/components/entry-gate-screen";
@@ -22,7 +22,7 @@ import {
   parseRatioInput,
   roundTo,
 } from "@/lib/calculations";
-import { DEFAULT_RECIPE, EMPTY_RECIPE, STORAGE_KEY } from "@/lib/defaults";
+import { EMPTY_RECIPE, SAMPLE_RECIPE, STORAGE_KEY } from "@/lib/defaults";
 import {
   createOilCatalogMap,
   FALLBACK_OILS,
@@ -148,55 +148,63 @@ function parseStoredRecipe(value: string | null) {
   }
 }
 
+function cloneRecipe(recipe: RecipeState): RecipeState {
+  return {
+    ...recipe,
+    water: { ...recipe.water },
+    oils: recipe.oils.map((oil) => ({ ...oil })),
+  };
+}
+
 function sanitizeRecipe(input: Partial<RecipeState> | null | undefined): RecipeState {
   return {
     recipeName:
       typeof input?.recipeName === "string" && input.recipeName.trim()
         ? input.recipeName
-        : DEFAULT_RECIPE.recipeName,
+        : EMPTY_RECIPE.recipeName,
     totalOilWeight:
       typeof input?.totalOilWeight === "number" && Number.isFinite(input.totalOilWeight)
         ? Math.max(input.totalOilWeight, 0)
-        : DEFAULT_RECIPE.totalOilWeight,
+        : EMPTY_RECIPE.totalOilWeight,
     unit: input?.unit === "oz" ? "oz" : "g",
     superfat:
       typeof input?.superfat === "number" && Number.isFinite(input.superfat)
         ? clamp(input.superfat, 0, 20)
-        : DEFAULT_RECIPE.superfat,
+        : EMPTY_RECIPE.superfat,
     water: {
       mode:
         input?.water?.mode === "percentOfOils" ||
         input?.water?.mode === "waterLyeRatio" ||
         input?.water?.mode === "lyeConcentration"
           ? input.water.mode
-          : DEFAULT_RECIPE.water.mode,
+          : EMPTY_RECIPE.water.mode,
       percentOfOils:
         typeof input?.water?.percentOfOils === "number" && Number.isFinite(input.water.percentOfOils)
           ? clamp(input.water.percentOfOils, 0, 100)
-          : DEFAULT_RECIPE.water.percentOfOils,
+          : EMPTY_RECIPE.water.percentOfOils,
       lyeConcentration:
         typeof input?.water?.lyeConcentration === "number" && Number.isFinite(input.water.lyeConcentration)
           ? clamp(input.water.lyeConcentration, 0.1, 0.95)
-          : DEFAULT_RECIPE.water.lyeConcentration,
+          : EMPTY_RECIPE.water.lyeConcentration,
       waterLyeRatio:
         typeof input?.water?.waterLyeRatio === "number" && Number.isFinite(input.water.waterLyeRatio)
           ? clamp(input.water.waterLyeRatio, 0.5, 5)
-          : DEFAULT_RECIPE.water.waterLyeRatio,
+          : EMPTY_RECIPE.water.waterLyeRatio,
     },
     lyeType:
       input?.lyeType === "koh" || input?.lyeType === "koh90" || input?.lyeType === "naoh"
         ? input.lyeType
-        : DEFAULT_RECIPE.lyeType,
+        : EMPTY_RECIPE.lyeType,
     fragranceLoad:
       typeof input?.fragranceLoad === "number" && Number.isFinite(input.fragranceLoad)
         ? Math.max(input.fragranceLoad, 0)
-        : DEFAULT_RECIPE.fragranceLoad,
+        : EMPTY_RECIPE.fragranceLoad,
     oils:
       Array.isArray(input?.oils) && input.oils.length > 0
         ? input.oils
             .filter((oil) => typeof oil?.id === "string" && typeof oil?.percent === "number")
             .map((oil) => ({ id: normalizeOilSlug(oil.id), percent: Math.max(oil.percent, 0) }))
-        : DEFAULT_RECIPE.oils,
+        : EMPTY_RECIPE.oils,
   };
 }
 
@@ -214,15 +222,18 @@ function getWaterModeLabel(recipe: RecipeState, result: SoapCalculationResult) {
 export function SoapWizard() {
   const reducedMotion = usePrefersReducedMotion();
   const pageLoaded = usePageLoaded(reducedMotion);
-  const [draftRecipe, setDraftRecipe] = useState<RecipeState>(DEFAULT_RECIPE);
+  const skipNextPersistRef = useRef(false);
+  const [draftRecipe, setDraftRecipe] = useState<RecipeState>(() => cloneRecipe(EMPTY_RECIPE));
   const [finalizedRecipe, setFinalizedRecipe] = useState<RecipeState | null>(null);
   const [entryMode, setEntryMode] = useState<EntryMode>("percent");
   const [oilCatalog, setOilCatalog] = useState<OilCatalogItem[]>(FALLBACK_OILS);
   const [oilsStatus, setOilsStatus] = useState<"loading" | "ready" | "fallback" | "empty">("loading");
   const [oilsMessage, setOilsMessage] = useState("");
+  const [recipeActionMessage, setRecipeActionMessage] = useState("");
+  const [recipeActionTone, setRecipeActionTone] = useState<"info" | "warning">("info");
   const [newOilId, setNewOilId] = useState<string>(getInitialOilSlug(FALLBACK_OILS));
-  const [topLevelDrafts, setTopLevelDrafts] = useState<TopLevelDrafts>(() => makeTopLevelDrafts(DEFAULT_RECIPE));
-  const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
+  const [topLevelDrafts, setTopLevelDrafts] = useState<TopLevelDrafts>(() => makeTopLevelDrafts(EMPTY_RECIPE));
+  const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(EMPTY_RECIPE));
   const [activeView, setActiveView] = useState<ActiveView>("batch");
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isEntryApproved, setIsEntryApproved] = useState(false);
@@ -272,6 +283,11 @@ export function SoapWizard() {
 
   useEffect(() => {
     if (!disclaimerReady) {
+      return;
+    }
+
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
       return;
     }
 
@@ -593,13 +609,48 @@ export function SoapWizard() {
     syncDraftsFromRecipe(nextRecipe);
   };
 
-  const resetWizard = () => {
-    setDraftRecipe(EMPTY_RECIPE);
+  const applyRecipe = (recipe: RecipeState) => {
+    const nextRecipe = sanitizeRecipe(recipe);
+    setDraftRecipe(nextRecipe);
+    syncDraftsFromRecipe(nextRecipe);
     setFinalizedRecipe(null);
     setEntryMode("percent");
     setActiveView("batch");
+    setIsSummaryOpen(false);
+    return nextRecipe;
+  };
+
+  const resetWizard = () => {
+    skipNextPersistRef.current = true;
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore local storage issues.
+    }
+    applyRecipe(cloneRecipe(EMPTY_RECIPE));
     setNewOilId(getInitialOilSlug(oilCatalog));
-    syncDraftsFromRecipe(EMPTY_RECIPE);
+    setRecipeActionTone("info");
+    setRecipeActionMessage("Started a fresh blank recipe.");
+  };
+
+  const loadSampleRecipe = () => {
+    const normalizedSample = sanitizeRecipe(cloneRecipe(SAMPLE_RECIPE));
+    const missingOils = normalizedSample.oils
+      .map((oil) => normalizeOilSlug(oil.id))
+      .filter((slug) => !oilCatalogMap.has(slug));
+
+    if (missingOils.length > 0) {
+      const missingNames = missingOils.join(", ");
+      setRecipeActionTone("warning");
+      setRecipeActionMessage(
+        `The sample recipe cannot load because these oils are unavailable in the current catalog: ${missingNames}.`,
+      );
+      return;
+    }
+
+    applyRecipe(normalizedSample);
+    setRecipeActionTone("info");
+    setRecipeActionMessage("Loaded the sample recipe.");
   };
 
   const stepForward = () => {
@@ -658,6 +709,35 @@ export function SoapWizard() {
 
   const renderBatchStep = () => (
     <>
+      <div className="mb-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Recipe actions</p>
+            <p className="mt-2 text-sm text-[var(--text-soft)]">
+              Start clean or load a working sample without affecting the oils catalog connection.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button type="button" onClick={resetWizard} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">
+              New / Clear Recipe
+            </button>
+            <button type="button" onClick={loadSampleRecipe} className="pill-toggle rounded-2xl px-4 py-3 text-sm font-medium">
+              Load Sample Recipe
+            </button>
+          </div>
+        </div>
+        {recipeActionMessage ? (
+          <p
+            className={`mt-4 rounded-2xl px-4 py-3 text-sm leading-6 ${
+              recipeActionTone === "warning"
+                ? "warning-card"
+                : "border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)]"
+            }`}
+          >
+            {recipeActionMessage}
+          </p>
+        ) : null}
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Recipe name">
           <TextInput value={topLevelDrafts.recipeName} onChange={(event) => handleRecipeName(event.target.value)} placeholder="Weekend Tallow Bar" />
