@@ -10,6 +10,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { Stat } from "@/components/ui/stat";
 import { TextInput } from "@/components/ui/text-input";
+import { RecipePrintSheet } from "@/components/wizard/print-recipe-sheet";
 import {
   calculateRecipe,
   clamp,
@@ -42,7 +43,6 @@ import {
 import {
   formatRecipeWeight,
   getStepIndex,
-  PrintRecipeCard,
   RevealSection,
   StepIndicator,
   StepNavigation,
@@ -691,7 +691,21 @@ export function SoapWizard() {
   };
 
   const handlePrint = () => {
-    window.print();
+    if (!finalizedRecipe) {
+      return;
+    }
+
+    const originalTitle = document.title;
+    const printTitle = `${(finalizedRecipe.recipeName.trim() || "Soap Recipe")} | Tallow Be Thy Soap`;
+
+    const restoreTitle = () => {
+      document.title = originalTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+
+    document.title = printTitle;
+    window.addEventListener("afterprint", restoreTitle);
+    window.requestAnimationFrame(() => window.print());
   };
 
   const handleEntryApproved = () => {
@@ -980,11 +994,26 @@ export function SoapWizard() {
             <Stat label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
             <Stat label="Total batch" value={formatRecipeWeight(finalResult.totals.totalBatch, finalizedRecipe.unit)} />
           </div>
-          <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Final recipe card</p>
-            <h3 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">{finalizedRecipe.recipeName}</h3>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">Ready for printing, saving as PDF, or editing. Use the step rail any time to refine the recipe and regenerate the output.</p>
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.28fr)_minmax(280px,0.72fr)]">
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Printable recipe sheet</p>
+              <h3 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">
+                {finalizedRecipe.recipeName || "Untitled recipe"}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">
+                This preview mirrors the dedicated print and PDF document. Browser print now targets the recipe sheet only, not the surrounding calculator UI.
+              </p>
+              <div className="recipe-output-preview mt-5">
+                <RecipePrintSheet
+                  recipe={finalizedRecipe}
+                  result={finalResult}
+                  getWaterModeLabel={getWaterModeLabel}
+                  mode="screen"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
               <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output summary</p>
                 <div className="mt-4 space-y-3">
@@ -992,13 +1021,10 @@ export function SoapWizard() {
                   <SummaryRow label="Water setting" value={getWaterModeLabel(finalizedRecipe, finalResult)} />
                   <SummaryRow label="Fragrance loading" value={`${trimTrailingZeros(formatPercent(finalizedRecipe.fragranceLoad))} g/kg`} />
                   <SummaryRow label="Fragrance amount" value={formatRecipeWeight(finalResult.totals.fragranceWeight, finalizedRecipe.unit)} />
-                </div>
-                <div className="mt-5 space-y-2 border-t border-[var(--border)] pt-4">
-                  {finalResult.oils.map((oil) => (
-                    <SummaryRow key={oil.oilId} label={`${oil.name} (${formatPercent(oil.percent)}%)`} value={formatRecipeWeight(oil.weight, finalizedRecipe.unit)} />
-                  ))}
+                  <SummaryRow label="Warnings" value={finalResult.warnings.length > 0 ? `${finalResult.warnings.length}` : "None"} />
                 </div>
               </div>
+
               <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output actions</p>
                 <div className="mt-4 grid gap-3">
@@ -1006,6 +1032,9 @@ export function SoapWizard() {
                   <button type="button" onClick={() => setActiveView("review")} className="pill-toggle pill-toggle--quiet rounded-2xl px-5 py-3 text-sm font-medium">Edit recipe</button>
                   <button type="button" onClick={resetWizard} className="pill-toggle pill-toggle--quiet rounded-2xl px-5 py-3 text-sm font-medium">Start over</button>
                 </div>
+                <p className="mt-4 text-sm leading-6 text-[var(--text-soft)]">
+                  For the cleanest PDF, use the browser&apos;s default scale and letter-size paper.
+                </p>
               </div>
             </div>
           </div>
@@ -1075,129 +1104,140 @@ export function SoapWizard() {
       data-disclaimer-open={isDisclaimerOpen}
       style={{ "--parallax-x": `${parallaxOffset.x}px`, "--parallax-y": `${parallaxOffset.y}px` } as CSSProperties}
     >
-      {!isEntryApproved ? (
-        <div className="mx-auto max-w-6xl" aria-hidden={isDisclaimerOpen}>
-          <EntryGateScreen onEnter={handleEntryApproved} />
-        </div>
-      ) : (
-        <div className="mx-auto max-w-6xl space-y-5 page-fade-shell" aria-hidden={isDisclaimerOpen}>
-          {activeView === "output" ? renderOutputView() : renderWizardContent()}
-          {finalizedRecipe && finalResult ? <PrintRecipeCard recipe={finalizedRecipe} result={finalResult} getWaterModeLabel={getWaterModeLabel} /> : null}
-          <Footer />
-        </div>
-      )}
+      <div className="screen-app-shell print-hidden">
+        {!isEntryApproved ? (
+          <div className="mx-auto max-w-6xl" aria-hidden={isDisclaimerOpen}>
+            <EntryGateScreen onEnter={handleEntryApproved} />
+          </div>
+        ) : (
+          <div className="mx-auto max-w-6xl space-y-5 page-fade-shell" aria-hidden={isDisclaimerOpen}>
+            {activeView === "output" ? renderOutputView() : renderWizardContent()}
+            <Footer />
+          </div>
+        )}
 
-      {isSummaryOpen && isEntryApproved ? (
-        <div
-          className="disclaimer-overlay print-hidden"
-          role="presentation"
-          onClick={() => setIsSummaryOpen(false)}
-        >
+        {isSummaryOpen && isEntryApproved ? (
           <div
-            className="disclaimer-card max-h-[85vh] overflow-y-auto"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="live-batch-summary-title"
-            onClick={(event) => event.stopPropagation()}
+            className="disclaimer-overlay print-hidden"
+            role="presentation"
+            onClick={() => setIsSummaryOpen(false)}
           >
-            <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="disclaimer-eyebrow">Live Batch Snapshot</p>
-                <h2 id="live-batch-summary-title" className="disclaimer-title">
-                  Full batch summary
-                </h2>
-                <p className="disclaimer-copy">
-                  A fuller view of the working batch while you move through the calculator.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSummaryOpen(false)}
-                className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <Stat label="Total oils" value={formatRecipeWeight(draftResult.totals.oilWeight, draftRecipe.unit)} />
-              <Stat label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
-              <Stat label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
-              <Stat label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} hint={`${trimTrailingZeros(formatPercent(draftResult.totals.fragranceLoad))} g/kg`} />
-              <Stat label="Total batch" value={formatRecipeWeight(draftResult.totals.totalBatch, draftRecipe.unit)} />
-              <Stat label="Percent total" value={`${formatPercent(draftResult.totals.percent)}%`} hint={Math.abs(100 - draftResult.totals.percent) > 0.01 ? "Needs balancing" : "On target"} />
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
-                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
-                  Recipe details
-                </p>
-                <div className="mt-4 space-y-3">
-                  <SummaryRow label="Recipe name" value={draftRecipe.recipeName || "Untitled recipe"} />
-                  <SummaryRow label="Unit" value={draftRecipe.unit.toUpperCase()} />
-                  <SummaryRow label="Superfat" value={`${formatPercent(draftRecipe.superfat)}%`} />
-                  <SummaryRow label="Water method" value={getWaterModeLabel(draftRecipe, draftResult)} />
-                  <SummaryRow label="Fragrance loading" value={`${trimTrailingZeros(formatPercent(draftRecipe.fragranceLoad))} g/kg`} />
-                </div>
-                <div className="mt-5 space-y-2 border-t border-[var(--border)] pt-4">
-                  {draftResult.oils.map((oil) => (
-                    <SummaryRow
-                      key={oil.oilId}
-                      label={`${oil.name} (${formatPercent(oil.percent)}%)`}
-                      value={formatRecipeWeight(oil.weight, draftRecipe.unit)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
-                    Soap qualities
+            <div
+              className="disclaimer-card max-h-[85vh] overflow-y-auto"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="live-batch-summary-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="disclaimer-eyebrow">Live Batch Snapshot</p>
+                  <h2 id="live-batch-summary-title" className="disclaimer-title">
+                    Full batch summary
+                  </h2>
+                  <p className="disclaimer-copy">
+                    A fuller view of the working batch while you move through the calculator.
                   </p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {Object.entries(draftResult.qualities).map(([key, value]) => (
-                      <div
-                        key={key}
-                        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3"
-                      >
-                        <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
-                          {key}
-                        </p>
-                        <p className="mt-1 text-lg font-semibold text-[var(--text)]">
-                          {roundTo(value, 2).toFixed(2)}
-                        </p>
-                      </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSummaryOpen(false)}
+                  className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <Stat label="Total oils" value={formatRecipeWeight(draftResult.totals.oilWeight, draftRecipe.unit)} />
+                <Stat label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
+                <Stat label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
+                <Stat label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} hint={`${trimTrailingZeros(formatPercent(draftResult.totals.fragranceLoad))} g/kg`} />
+                <Stat label="Total batch" value={formatRecipeWeight(draftResult.totals.totalBatch, draftRecipe.unit)} />
+                <Stat label="Percent total" value={`${formatPercent(draftResult.totals.percent)}%`} hint={Math.abs(100 - draftResult.totals.percent) > 0.01 ? "Needs balancing" : "On target"} />
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                    Recipe details
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <SummaryRow label="Recipe name" value={draftRecipe.recipeName || "Untitled recipe"} />
+                    <SummaryRow label="Unit" value={draftRecipe.unit.toUpperCase()} />
+                    <SummaryRow label="Superfat" value={`${formatPercent(draftRecipe.superfat)}%`} />
+                    <SummaryRow label="Water method" value={getWaterModeLabel(draftRecipe, draftResult)} />
+                    <SummaryRow label="Fragrance loading" value={`${trimTrailingZeros(formatPercent(draftRecipe.fragranceLoad))} g/kg`} />
+                  </div>
+                  <div className="mt-5 space-y-2 border-t border-[var(--border)] pt-4">
+                    {draftResult.oils.map((oil) => (
+                      <SummaryRow
+                        key={oil.oilId}
+                        label={`${oil.name} (${formatPercent(oil.percent)}%)`}
+                        value={formatRecipeWeight(oil.weight, draftRecipe.unit)}
+                      />
                     ))}
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
-                    Warnings
-                  </p>
-                  <div className="mt-4 space-y-3">
-                    {draftResult.warnings.length > 0 ? (
-                      draftResult.warnings.map((warning) => (
-                        <div key={warning} className="warning-card rounded-2xl px-4 py-3 text-sm leading-6">
-                          {warning}
+                <div className="space-y-4">
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                      Soap qualities
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {Object.entries(draftResult.qualities).map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3"
+                        >
+                          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                            {key}
+                          </p>
+                          <p className="mt-1 text-lg font-semibold text-[var(--text)]">
+                            {roundTo(value, 2).toFixed(2)}
+                          </p>
                         </div>
-                      ))
-                    ) : (
-                      <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
-                        No warning flags at the moment. This formula looks balanced and ready to keep refining.
-                      </p>
-                    )}
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                      Warnings
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      {draftResult.warnings.length > 0 ? (
+                        draftResult.warnings.map((warning) => (
+                          <div key={warning} className="warning-card rounded-2xl px-4 py-3 text-sm leading-6">
+                            {warning}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
+                          No warning flags at the moment. This formula looks balanced and ready to keep refining.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        ) : null}
+
+        <DisclaimerModal open={isDisclaimerOpen} checked={disclaimerChecked} onCheckedChange={setDisclaimerChecked} onConfirm={handleAcceptDisclaimer} />
+      </div>
+
+      {finalizedRecipe && finalResult ? (
+        <div className="recipe-print-root" aria-hidden="true">
+          <RecipePrintSheet
+            recipe={finalizedRecipe}
+            result={finalResult}
+            getWaterModeLabel={getWaterModeLabel}
+          />
         </div>
       ) : null}
-
-      <DisclaimerModal open={isDisclaimerOpen} checked={disclaimerChecked} onCheckedChange={setDisclaimerChecked} onConfirm={handleAcceptDisclaimer} />
     </main>
   );
 }

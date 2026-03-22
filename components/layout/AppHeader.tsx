@@ -8,7 +8,7 @@ const SHARE_TEXT = "Tallow Be Thy Soap Lab | Guided cold process soap calculator
 
 export function AppHeader() {
   return (
-    <header className="mx-auto max-w-6xl px-4 pt-8">
+    <header className="mx-auto max-w-6xl px-4 pt-8 print-hidden">
       <section className="paper-card p-6 md:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
