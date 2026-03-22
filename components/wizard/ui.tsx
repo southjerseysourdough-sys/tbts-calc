@@ -5,7 +5,7 @@ import { useTheme } from "@/components/theme-provider";
 import { RecipeState, SoapCalculationResult, Unit } from "@/lib/types";
 import { formatPercent, formatWeight, roundTo } from "@/lib/calculations";
 
-export type WizardStepId = "batch" | "oils" | "water" | "lye" | "review" | "output";
+export type WizardStepId = "batch" | "oils" | "water" | "lye" | "review";
 
 export const WIZARD_STEPS: { id: WizardStepId; title: string; subtitle: string }[] = [
   {
@@ -32,11 +32,6 @@ export const WIZARD_STEPS: { id: WizardStepId; title: string; subtitle: string }
     id: "review",
     title: "Review Recipe",
     subtitle: "Read the full summary and warnings before final output.",
-  },
-  {
-    id: "output",
-    title: "Recipe Output",
-    subtitle: "Print, save to PDF, edit, or start a fresh batch.",
   },
 ];
 
@@ -120,7 +115,7 @@ export function StepIndicator({
 
   return (
     <div className="control-cluster rounded-[1.6rem] p-3">
-      <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
         {WIZARD_STEPS.map((step, index) => {
           const isActive = step.id === currentStep;
           const isCompleted = index < currentIndex;

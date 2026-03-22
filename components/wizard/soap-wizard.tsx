@@ -1,10 +1,10 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { DisclaimerModal } from "@/components/disclaimer-modal";
+import { EntryGateScreen } from "@/components/entry-gate-screen";
 import { Footer } from "@/components/footer";
-import { TurnstileWidget } from "@/components/turnstile-widget";
 import { Field } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
@@ -22,7 +22,7 @@ import {
   parseRatioInput,
   roundTo,
 } from "@/lib/calculations";
-import { DEFAULT_RECIPE, EMPTY_RECIPE, FEATURED_OIL_IDS, SAMPLE_RECIPE, STORAGE_KEY } from "@/lib/defaults";
+import { DEFAULT_RECIPE, EMPTY_RECIPE, FEATURED_OIL_IDS, STORAGE_KEY } from "@/lib/defaults";
 import { OIL_MAP } from "@/lib/oil-data";
 import { EntryMode, LyeType, RecipeState, SoapCalculationResult, Unit, WaterMode } from "@/lib/types";
 import {
@@ -30,16 +30,15 @@ import {
   getStepIndex,
   PrintRecipeCard,
   RevealSection,
-  ShareModule,
   StepIndicator,
   StepNavigation,
   SummaryRow,
-  ThemeToggle,
   WIZARD_STEPS,
   WizardStepId,
 } from "@/components/wizard/ui";
 
 type OilDraftMap = Record<string, { percent: string; weight: string }>;
+type ActiveView = WizardStepId | "output";
 
 type TopLevelDrafts = {
   recipeName: string;
@@ -52,11 +51,8 @@ type TopLevelDrafts = {
 };
 
 const OUNCES_TO_GRAMS = 28.349523125;
-const HOMEPAGE_URL = "https://tallowbethysoap.com/";
-const SHARE_URL = "https://calc.tallowbethysoap.com/";
-const SHARE_TEXT = "Tallow Be Thy Soap Lab | Guided cold process soap calculator";
 const DISCLAIMER_KEY = "tallow-be-thy-soap-disclaimer-accepted";
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+const ENTRY_GATE_SESSION_KEY = "tbts-turnstile-entry-approved";
 
 const LYE_OPTIONS: { value: LyeType; label: string }[] = [
   { value: "naoh", label: "NaOH" },
@@ -210,15 +206,9 @@ export function SoapWizard() {
   const [newOilId, setNewOilId] = useState<string>(FEATURED_OIL_IDS[0]);
   const [topLevelDrafts, setTopLevelDrafts] = useState<TopLevelDrafts>(() => makeTopLevelDrafts(DEFAULT_RECIPE));
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
-  const [currentStep, setCurrentStep] = useState<WizardStepId>("batch");
+  const [activeView, setActiveView] = useState<ActiveView>("batch");
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
-  const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState("");
-  const [turnstileStatus, setTurnstileStatus] = useState<
-    "idle" | "verifying" | "verified" | "failed"
-  >("idle");
-  const [turnstileMessage, setTurnstileMessage] = useState("");
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [isEntryApproved, setIsEntryApproved] = useState(false);
   const [disclaimerReady, setDisclaimerReady] = useState(false);
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
@@ -234,13 +224,11 @@ export function SoapWizard() {
   );
   const draftResult = useMemo(() => calculateRecipe(draftRecipe), [draftRecipe]);
   const finalResult = useMemo(() => (finalizedRecipe ? calculateRecipe(finalizedRecipe) : null), [finalizedRecipe]);
+  const currentStep = activeView === "output" ? "review" : activeView;
   const currentStepIndex = getStepIndex(currentStep);
   const currentStepMeta = WIZARD_STEPS[currentStepIndex];
   const totalPercentDifference = roundTo(100 - draftResult.totals.percent, 2);
   const isDisclaimerOpen = disclaimerReady && !hasAcceptedDisclaimer;
-  const isTurnstileVerified = turnstileStatus === "verified";
-  const canContinueToOutput =
-    reviewAcknowledged && Boolean(turnstileToken) && isTurnstileVerified;
 
   const syncDraftsFromRecipe = (nextRecipe: RecipeState) => {
     setTopLevelDrafts(makeTopLevelDrafts(nextRecipe));
@@ -260,8 +248,10 @@ export function SoapWizard() {
         syncDraftsFromRecipe(nextRecipe);
       }
       setHasAcceptedDisclaimer(window.localStorage.getItem(DISCLAIMER_KEY) === "true");
+      setIsEntryApproved(window.sessionStorage.getItem(ENTRY_GATE_SESSION_KEY) === "true");
     } catch {
       setHasAcceptedDisclaimer(false);
+      setIsEntryApproved(false);
     } finally {
       setDisclaimerReady(true);
     }
@@ -523,49 +513,43 @@ export function SoapWizard() {
     syncDraftsFromRecipe(nextRecipe);
   };
 
-  const loadSample = () => {
-    setDraftRecipe(SAMPLE_RECIPE);
-    setFinalizedRecipe(null);
-    setEntryMode("percent");
-    setCurrentStep("batch");
-    setReviewAcknowledged(false);
-    setTurnstileToken("");
-    setTurnstileStatus("idle");
-    setTurnstileMessage("");
-    setTurnstileResetKey(0);
-    syncDraftsFromRecipe(SAMPLE_RECIPE);
-  };
-
   const resetWizard = () => {
     setDraftRecipe(EMPTY_RECIPE);
     setFinalizedRecipe(null);
     setEntryMode("percent");
-    setCurrentStep("batch");
+    setActiveView("batch");
     setNewOilId(FEATURED_OIL_IDS[0]);
-    setReviewAcknowledged(false);
-    setTurnstileToken("");
-    setTurnstileStatus("idle");
-    setTurnstileMessage("");
-    setTurnstileResetKey(0);
     syncDraftsFromRecipe(EMPTY_RECIPE);
   };
 
   const stepForward = () => {
-    if (currentStep === "review") {
-      if (!canContinueToOutput) {
-        return;
-      }
-      setFinalizedRecipe(sanitizeRecipe(draftRecipe));
+    if (activeView === "output") {
+      return;
     }
 
-    if (currentStepIndex < WIZARD_STEPS.length - 1) {
-      setCurrentStep(WIZARD_STEPS[currentStepIndex + 1].id);
+    if (activeView === "review") {
+      setFinalizedRecipe(sanitizeRecipe(draftRecipe));
+      setActiveView("output");
+      return;
+    }
+
+    const wizardStep: WizardStepId = activeView;
+    const index = getStepIndex(wizardStep);
+    if (index < WIZARD_STEPS.length - 1) {
+      setActiveView(WIZARD_STEPS[index + 1].id);
     }
   };
 
   const stepBack = () => {
-    if (currentStepIndex > 0) {
-      setCurrentStep(WIZARD_STEPS[currentStepIndex - 1].id);
+    if (activeView === "output") {
+      setActiveView("review");
+      return;
+    }
+
+    const wizardStep: WizardStepId = activeView;
+    const index = getStepIndex(wizardStep);
+    if (index > 0) {
+      setActiveView(WIZARD_STEPS[index - 1].id);
     }
   };
 
@@ -579,91 +563,14 @@ export function SoapWizard() {
     window.print();
   };
 
-  const resetTurnstileState = useCallback((message?: string) => {
-    setTurnstileToken("");
-    setTurnstileStatus("idle");
-    setTurnstileMessage(message ?? "");
-    setTurnstileResetKey((current) => current + 1);
-  }, []);
-
-  const handleTurnstileExpired = useCallback(() => {
-    resetTurnstileState("Verification expired. Please complete the check again.");
-  }, [resetTurnstileState]);
-
-  const handleTurnstileError = useCallback(
-    (message: string) => {
-      setTurnstileStatus("failed");
-      setTurnstileMessage(message);
-    },
-    [],
-  );
-
-  const handleTurnstileToken = useCallback((token: string) => {
-    setTurnstileToken(token);
-    setTurnstileStatus("verifying");
-    setTurnstileMessage("Checking verification...");
-  }, []);
-
-  useEffect(() => {
-    if (!turnstileToken) {
-      return;
+  const handleEntryApproved = () => {
+    try {
+      window.sessionStorage.setItem(ENTRY_GATE_SESSION_KEY, "true");
+    } catch {
+      // Ignore session storage issues.
     }
-
-    let ignore = false;
-
-    const verifyToken = async () => {
-      try {
-        const response = await fetch("/api/turnstile/verify", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ token: turnstileToken }),
-        });
-
-        const data = (await response.json()) as {
-          success?: boolean;
-          message?: string;
-          error?: string;
-        };
-
-        if (ignore) {
-          return;
-        }
-
-        if (response.ok && data.success) {
-          setTurnstileStatus("verified");
-          setTurnstileMessage("Verification complete. You can continue to Recipe Output.");
-          return;
-        }
-
-        setTurnstileStatus("failed");
-        setTurnstileMessage(
-          data.message ??
-            "Verification could not be confirmed. Please reset the check and try again.",
-        );
-        setTurnstileToken("");
-        setTurnstileResetKey((current) => current + 1);
-      } catch {
-        if (ignore) {
-          return;
-        }
-
-        setTurnstileStatus("failed");
-        setTurnstileMessage(
-          "Verification could not be completed right now. Please reset the check and try again.",
-        );
-        setTurnstileToken("");
-        setTurnstileResetKey((current) => current + 1);
-      }
-    };
-
-    verifyToken();
-
-    return () => {
-      ignore = true;
-    };
-  }, [turnstileToken]);
+    setIsEntryApproved(true);
+  };
 
   const availableOilOptions = featuredOilOptions.filter(
     (oil) => !draftRecipe.oils.some((entry) => entry.id === oil.id),
@@ -692,65 +599,6 @@ export function SoapWizard() {
         </Field>
       </div>
       <StepNavigation canGoBack={false} backLabel="At start" onBack={() => undefined} onNext={stepForward} nextLabel="Continue to Oil Composition" />
-    </>
-  );
-
-  const renderWaterStep = () => (
-    <>
-      <Field label="Water method">
-        <SegmentedControl
-          value={draftRecipe.water.mode}
-          onChange={handleWaterModeChange}
-          options={[
-            { value: "percentOfOils", label: "Water as % of oils" },
-            { value: "lyeConcentration", label: "Lye concentration" },
-            { value: "waterLyeRatio", label: "Water : lye ratio" },
-          ]}
-        />
-      </Field>
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
-        <Field label="Water as % of oils">
-          <TextInput inputMode="decimal" value={topLevelDrafts.waterPercentOfOils} onChange={(event) => handleWaterValueChange("percentOfOils", event.target.value)} onBlur={normalizeTopLevelBlur} suffix="%" />
-        </Field>
-        <Field label="Lye concentration">
-          <TextInput inputMode="decimal" value={topLevelDrafts.lyeConcentration} onChange={(event) => handleWaterValueChange("lyeConcentration", event.target.value)} onBlur={normalizeTopLevelBlur} suffix="%" />
-        </Field>
-        <Field label="Water : lye ratio">
-          <TextInput inputMode="text" value={topLevelDrafts.waterLyeRatio} onChange={(event) => handleWaterValueChange("waterLyeRatio", event.target.value)} onBlur={normalizeTopLevelBlur} placeholder="2:1 or 1.8" />
-        </Field>
-      </div>
-      <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-        <p className="text-sm text-[var(--text-soft)]">
-          Current water amount: <strong className="text-[var(--text)]">{formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)}</strong>
-        </p>
-      </div>
-      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Continue to Lye and Additives" />
-    </>
-  );
-
-  const renderLyeStep = () => (
-    <>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="space-y-5">
-          <Field label="Alkali type">
-            <SegmentedControl value={draftRecipe.lyeType} onChange={(value) => updateDraft((current) => ({ ...current, lyeType: value }))} options={LYE_OPTIONS} />
-          </Field>
-          <Field label="Fragrance loading" hint="grams per kilogram of oils">
-            <TextInput inputMode="decimal" value={topLevelDrafts.fragranceLoad} onChange={(event) => handleFragranceLoadChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix="g/kg" />
-          </Field>
-        </div>
-        <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
-          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Live solution preview</p>
-          <div className="mt-4 space-y-3">
-            <SummaryRow label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
-            <SummaryRow label="Pure alkali basis" value={formatRecipeWeight(draftResult.lye.pureAmount, draftRecipe.unit)} />
-            <SummaryRow label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
-            <SummaryRow label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} />
-            <SummaryRow label="Water setting" value={getWaterModeLabel(draftRecipe, draftResult)} />
-          </div>
-        </div>
-      </div>
-      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Continue to Review" />
     </>
   );
 
@@ -832,6 +680,65 @@ export function SoapWizard() {
     </>
   );
 
+  const renderWaterStep = () => (
+    <>
+      <Field label="Water method">
+        <SegmentedControl
+          value={draftRecipe.water.mode}
+          onChange={handleWaterModeChange}
+          options={[
+            { value: "percentOfOils", label: "Water as % of oils" },
+            { value: "lyeConcentration", label: "Lye concentration" },
+            { value: "waterLyeRatio", label: "Water : lye ratio" },
+          ]}
+        />
+      </Field>
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <Field label="Water as % of oils">
+          <TextInput inputMode="decimal" value={topLevelDrafts.waterPercentOfOils} onChange={(event) => handleWaterValueChange("percentOfOils", event.target.value)} onBlur={normalizeTopLevelBlur} suffix="%" />
+        </Field>
+        <Field label="Lye concentration">
+          <TextInput inputMode="decimal" value={topLevelDrafts.lyeConcentration} onChange={(event) => handleWaterValueChange("lyeConcentration", event.target.value)} onBlur={normalizeTopLevelBlur} suffix="%" />
+        </Field>
+        <Field label="Water : lye ratio">
+          <TextInput inputMode="text" value={topLevelDrafts.waterLyeRatio} onChange={(event) => handleWaterValueChange("waterLyeRatio", event.target.value)} onBlur={normalizeTopLevelBlur} placeholder="2:1 or 1.8" />
+        </Field>
+      </div>
+      <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+        <p className="text-sm text-[var(--text-soft)]">
+          Current water amount: <strong className="text-[var(--text)]">{formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)}</strong>
+        </p>
+      </div>
+      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Continue to Lye and Additives" />
+    </>
+  );
+
+  const renderLyeStep = () => (
+    <>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="space-y-5">
+          <Field label="Alkali type">
+            <SegmentedControl value={draftRecipe.lyeType} onChange={(value) => updateDraft((current) => ({ ...current, lyeType: value }))} options={LYE_OPTIONS} />
+          </Field>
+          <Field label="Fragrance loading" hint="grams per kilogram of oils">
+            <TextInput inputMode="decimal" value={topLevelDrafts.fragranceLoad} onChange={(event) => handleFragranceLoadChange(event.target.value)} onBlur={normalizeTopLevelBlur} suffix="g/kg" />
+          </Field>
+        </div>
+        <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Live solution preview</p>
+          <div className="mt-4 space-y-3">
+            <SummaryRow label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
+            <SummaryRow label="Pure alkali basis" value={formatRecipeWeight(draftResult.lye.pureAmount, draftRecipe.unit)} />
+            <SummaryRow label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
+            <SummaryRow label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} />
+            <SummaryRow label="Water setting" value={getWaterModeLabel(draftRecipe, draftResult)} />
+          </div>
+        </div>
+      </div>
+      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Continue to Review" />
+    </>
+  );
+
   const renderReviewStep = () => (
     <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -882,122 +789,53 @@ export function SoapWizard() {
           </div>
         </div>
       </div>
-      <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
-        <p className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
-          Review acknowledgment
-        </p>
-        <h3 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--text)]">
-          Confirm the recipe before final output
-        </h3>
-        <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">
-          Acknowledge the formulation note, complete the verification check, and then continue to
-          the clean printable recipe page.
-        </p>
-
-        <label className="mt-5 flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 text-sm leading-6 text-[var(--text)]">
-          <input
-            type="checkbox"
-            checked={reviewAcknowledged}
-            onChange={(event) => setReviewAcknowledged(event.target.checked)}
-            className="mt-1 h-4 w-4 accent-[var(--accent)]"
-          />
-          <span>
-            I understand this calculator is a formulation aid, and I will review my oils, alkali,
-            fragrance limits, and process choices before making a batch.
-          </span>
-        </label>
-
-        <div className="mt-4 space-y-3">
-          <TurnstileWidget
-            siteKey={TURNSTILE_SITE_KEY}
-            resetKey={turnstileResetKey}
-            theme="auto"
-            onToken={handleTurnstileToken}
-            onExpired={handleTurnstileExpired}
-            onError={handleTurnstileError}
-          />
-
-          {turnstileMessage ? (
-            <p
-              className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
-                turnstileStatus === "failed"
-                  ? "warning-card"
-                  : "border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)]"
-              }`}
-            >
-              {turnstileMessage}
-            </p>
-          ) : null}
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button
-              type="button"
-              onClick={() => resetTurnstileState("Verification reset. Please complete the check again.")}
-              className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium"
-            >
-              Reset verification
-            </button>
-            {!TURNSTILE_SITE_KEY ? (
-              <p className="text-sm text-[var(--warning)]">
-                Developer note: add the public Turnstile site key before this step can unlock.
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <StepNavigation
-        canGoBack
-        onBack={stepBack}
-        onNext={stepForward}
-        nextLabel="Continue to Recipe Output"
-        nextDisabled={!canContinueToOutput}
-      />
+      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Open Recipe Output" />
     </>
   );
 
-  const renderOutputStep = () => (
+  const renderOutputView = () => (
     finalizedRecipe && finalResult ? (
-      <>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Total oils" value={formatRecipeWeight(finalResult.totals.oilWeight, finalizedRecipe.unit)} />
-          <Stat label={finalResult.lye.label} value={formatRecipeWeight(finalResult.lye.displayAmount, finalizedRecipe.unit)} />
-          <Stat label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
-          <Stat label="Total batch" value={formatRecipeWeight(finalResult.totals.totalBatch, finalizedRecipe.unit)} />
-        </div>
-        <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
-          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Final recipe card</p>
-          <h3 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">{finalizedRecipe.recipeName}</h3>
-          <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">Ready for printing, saving as PDF, or editing. Use the step rail any time to refine the recipe and regenerate the output.</p>
-          <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output summary</p>
-              <div className="mt-4 space-y-3">
-                <SummaryRow label="Superfat" value={`${formatPercent(finalizedRecipe.superfat)}%`} />
-                <SummaryRow label="Water setting" value={getWaterModeLabel(finalizedRecipe, finalResult)} />
-                <SummaryRow label="Fragrance loading" value={`${trimTrailingZeros(formatPercent(finalizedRecipe.fragranceLoad))} g/kg`} />
-                <SummaryRow label="Fragrance amount" value={formatRecipeWeight(finalResult.totals.fragranceWeight, finalizedRecipe.unit)} />
+      <RevealSection reducedMotion={reducedMotion} as="div" delay={140}>
+        <Card title="Recipe Output" subtitle="Print, save to PDF, edit, or start a fresh batch.">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Stat label="Total oils" value={formatRecipeWeight(finalResult.totals.oilWeight, finalizedRecipe.unit)} />
+            <Stat label={finalResult.lye.label} value={formatRecipeWeight(finalResult.lye.displayAmount, finalizedRecipe.unit)} />
+            <Stat label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
+            <Stat label="Total batch" value={formatRecipeWeight(finalResult.totals.totalBatch, finalizedRecipe.unit)} />
+          </div>
+          <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
+            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Final recipe card</p>
+            <h3 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">{finalizedRecipe.recipeName}</h3>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">Ready for printing, saving as PDF, or editing. Use the step rail any time to refine the recipe and regenerate the output.</p>
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output summary</p>
+                <div className="mt-4 space-y-3">
+                  <SummaryRow label="Superfat" value={`${formatPercent(finalizedRecipe.superfat)}%`} />
+                  <SummaryRow label="Water setting" value={getWaterModeLabel(finalizedRecipe, finalResult)} />
+                  <SummaryRow label="Fragrance loading" value={`${trimTrailingZeros(formatPercent(finalizedRecipe.fragranceLoad))} g/kg`} />
+                  <SummaryRow label="Fragrance amount" value={formatRecipeWeight(finalResult.totals.fragranceWeight, finalizedRecipe.unit)} />
+                </div>
+                <div className="mt-5 space-y-2 border-t border-[var(--border)] pt-4">
+                  {finalResult.oils.map((oil) => (
+                    <SummaryRow key={oil.oilId} label={`${oil.name} (${formatPercent(oil.percent)}%)`} value={formatRecipeWeight(oil.weight, finalizedRecipe.unit)} />
+                  ))}
+                </div>
               </div>
-              <div className="mt-5 space-y-2 border-t border-[var(--border)] pt-4">
-                {finalResult.oils.map((oil) => (
-                  <SummaryRow key={oil.oilId} label={`${oil.name} (${formatPercent(oil.percent)}%)`} value={formatRecipeWeight(oil.weight, finalizedRecipe.unit)} />
-                ))}
-              </div>
-            </div>
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output actions</p>
-              <div className="mt-4 grid gap-3">
-                <button type="button" onClick={handlePrint} className="rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-strong)]">Print / Save PDF</button>
-                <button type="button" onClick={() => setCurrentStep("review")} className="pill-toggle pill-toggle--quiet rounded-2xl px-5 py-3 text-sm font-medium">Edit recipe</button>
-                <button type="button" onClick={resetWizard} className="pill-toggle pill-toggle--quiet rounded-2xl px-5 py-3 text-sm font-medium">Start over</button>
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output actions</p>
+                <div className="mt-4 grid gap-3">
+                  <button type="button" onClick={handlePrint} className="rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-strong)]">Print / Save PDF</button>
+                  <button type="button" onClick={() => setActiveView("review")} className="pill-toggle pill-toggle--quiet rounded-2xl px-5 py-3 text-sm font-medium">Edit recipe</button>
+                  <button type="button" onClick={resetWizard} className="pill-toggle pill-toggle--quiet rounded-2xl px-5 py-3 text-sm font-medium">Start over</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <StepNavigation canGoBack onBack={stepBack} onNext={handlePrint} nextLabel="Print / Save PDF" />
-      </>
-    ) : (
-      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Generate Recipe Output" />
-    )
+          <StepNavigation canGoBack onBack={stepBack} onNext={handlePrint} nextLabel="Print / Save PDF" />
+        </Card>
+      </RevealSection>
+    ) : null
   );
 
   const renderLiveSummaryStrip = () => (
@@ -1033,6 +871,26 @@ export function SoapWizard() {
     </RevealSection>
   );
 
+  const renderWizardContent = () => (
+    <>
+      <RevealSection reducedMotion={reducedMotion} as="div" delay={90} className="print-hidden">
+        <StepIndicator currentStep={currentStep} onSelect={setActiveView} />
+      </RevealSection>
+
+      {renderLiveSummaryStrip()}
+
+      <RevealSection reducedMotion={reducedMotion} as="div" delay={140}>
+        <Card title={currentStepMeta.title} subtitle={currentStepMeta.subtitle}>
+          {activeView === "batch" ? renderBatchStep() : null}
+          {activeView === "oils" ? renderOilStep() : null}
+          {activeView === "water" ? renderWaterStep() : null}
+          {activeView === "lye" ? renderLyeStep() : null}
+          {activeView === "review" ? renderReviewStep() : null}
+        </Card>
+      </RevealSection>
+    </>
+  );
+
   return (
     <main
       className="lab-shell"
@@ -1040,50 +898,19 @@ export function SoapWizard() {
       data-disclaimer-open={isDisclaimerOpen}
       style={{ "--parallax-x": `${parallaxOffset.x}px`, "--parallax-y": `${parallaxOffset.y}px` } as CSSProperties}
     >
-      <div className="mx-auto max-w-6xl space-y-5 page-fade-shell" aria-hidden={isDisclaimerOpen}>
-        <RevealSection reducedMotion={reducedMotion} className="paper-card p-6 md:p-8 print-hidden" delay={40}>
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="flex flex-wrap items-center gap-3">
-                <a href={HOMEPAGE_URL} className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-strong)] transition hover:text-[var(--accent)]">
-                  <span aria-hidden="true">&lt;-</span>
-                  <span>Back to tallowbethysoap.com</span>
-                </a>
-                <ThemeToggle />
-              </div>
-              <p className="mt-4 text-xs uppercase tracking-[0.24em] text-[var(--accent-strong)]">Guided Artisan Soap Calculator</p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[var(--text)] md:text-5xl">Tallow Be Thy Soap Lab</h1>
-              <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--text-soft)]">Build your recipe one calm step at a time, review the full formula with warnings, then print or save a polished recipe card.</p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <button type="button" onClick={loadSample} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">Load sample recipe</button>
-                <button type="button" onClick={resetWizard} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">Start fresh</button>
-              </div>
-            </div>
-            <ShareModule shareUrl={SHARE_URL} shareText={SHARE_TEXT} />
-          </div>
-        </RevealSection>
+      {!isEntryApproved ? (
+        <div className="mx-auto max-w-6xl" aria-hidden={isDisclaimerOpen}>
+          <EntryGateScreen onEnter={handleEntryApproved} />
+        </div>
+      ) : (
+        <div className="mx-auto max-w-6xl space-y-5 page-fade-shell" aria-hidden={isDisclaimerOpen}>
+          {activeView === "output" ? renderOutputView() : renderWizardContent()}
+          {finalizedRecipe && finalResult ? <PrintRecipeCard recipe={finalizedRecipe} result={finalResult} getWaterModeLabel={getWaterModeLabel} /> : null}
+          <Footer />
+        </div>
+      )}
 
-        <RevealSection reducedMotion={reducedMotion} as="div" delay={90} className="print-hidden">
-          <StepIndicator currentStep={currentStep} onSelect={setCurrentStep} />
-        </RevealSection>
-
-        {renderLiveSummaryStrip()}
-
-        <RevealSection reducedMotion={reducedMotion} as="div" delay={140}>
-          <Card title={currentStepMeta.title} subtitle={currentStepMeta.subtitle}>
-            {currentStep === "batch" ? renderBatchStep() : null}
-            {currentStep === "oils" ? renderOilStep() : null}
-            {currentStep === "water" ? renderWaterStep() : null}
-            {currentStep === "lye" ? renderLyeStep() : null}
-            {currentStep === "review" ? renderReviewStep() : null}
-            {currentStep === "output" ? renderOutputStep() : null}
-          </Card>
-        </RevealSection>
-
-        {finalizedRecipe && finalResult ? <PrintRecipeCard recipe={finalizedRecipe} result={finalResult} getWaterModeLabel={getWaterModeLabel} /> : null}
-        <Footer />
-      </div>
-      {isSummaryOpen ? (
+      {isSummaryOpen && isEntryApproved ? (
         <div
           className="disclaimer-overlay print-hidden"
           role="presentation"
@@ -1103,7 +930,7 @@ export function SoapWizard() {
                   Full batch summary
                 </h2>
                 <p className="disclaimer-copy">
-                  A fuller view of the working batch while you move through the wizard.
+                  A fuller view of the working batch while you move through the calculator.
                 </p>
               </div>
               <button
@@ -1192,6 +1019,7 @@ export function SoapWizard() {
           </div>
         </div>
       ) : null}
+
       <DisclaimerModal open={isDisclaimerOpen} checked={disclaimerChecked} onCheckedChange={setDisclaimerChecked} onConfirm={handleAcceptDisclaimer} />
     </main>
   );
