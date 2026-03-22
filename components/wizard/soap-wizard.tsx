@@ -209,6 +209,7 @@ export function SoapWizard() {
   const [topLevelDrafts, setTopLevelDrafts] = useState<TopLevelDrafts>(() => makeTopLevelDrafts(DEFAULT_RECIPE));
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
   const [currentStep, setCurrentStep] = useState<WizardStepId>("batch");
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [disclaimerReady, setDisclaimerReady] = useState(false);
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
@@ -265,6 +266,21 @@ export function SoapWizard() {
       // Ignore local storage issues.
     }
   }, [disclaimerReady, draftRecipe]);
+
+  useEffect(() => {
+    if (!isSummaryOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSummaryOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSummaryOpen]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -804,6 +820,39 @@ export function SoapWizard() {
     )
   );
 
+  const renderLiveSummaryStrip = () => (
+    <RevealSection reducedMotion={reducedMotion} as="div" delay={110} className="print-hidden">
+      <div className="paper-card overflow-hidden p-4 md:p-5">
+        <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-strong)]">
+              Live Batch Summary
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">
+              A compact pulse on the batch while the active step stays front and center.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSummaryOpen(true)}
+            className="pill-toggle pill-toggle--quiet inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-medium"
+          >
+            View full summary
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <Stat label="Total oils" value={formatRecipeWeight(draftResult.totals.oilWeight, draftRecipe.unit)} />
+          <Stat label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
+          <Stat label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
+          <Stat label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} hint={`${trimTrailingZeros(formatPercent(draftResult.totals.fragranceLoad))} g/kg`} />
+          <Stat label="Total batch" value={formatRecipeWeight(draftResult.totals.totalBatch, draftRecipe.unit)} />
+          <Stat label="Percent total" value={`${formatPercent(draftResult.totals.percent)}%`} hint={Math.abs(100 - draftResult.totals.percent) > 0.01 ? "Needs balancing" : "On target"} />
+        </div>
+      </div>
+    </RevealSection>
+  );
+
   return (
     <main
       className="lab-shell"
@@ -838,39 +887,131 @@ export function SoapWizard() {
           <StepIndicator currentStep={currentStep} onSelect={setCurrentStep} />
         </RevealSection>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_360px]">
-          <div className="space-y-5">
-            <RevealSection reducedMotion={reducedMotion} as="div" delay={120}>
-              <Card title={currentStepMeta.title} subtitle={currentStepMeta.subtitle}>
-                {currentStep === "batch" ? renderBatchStep() : null}
-                {currentStep === "oils" ? renderOilStep() : null}
-                {currentStep === "water" ? renderWaterStep() : null}
-                {currentStep === "lye" ? renderLyeStep() : null}
-                {currentStep === "review" ? renderReviewStep() : null}
-                {currentStep === "output" ? renderOutputStep() : null}
-              </Card>
-            </RevealSection>
-          </div>
+        {renderLiveSummaryStrip()}
 
-          <div className="space-y-5 print-hidden">
-            <RevealSection reducedMotion={reducedMotion} as="div" delay={150}>
-              <Card title="Live Batch Snapshot" subtitle="A running summary while you move through the wizard.">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                  <Stat label="Total oils" value={formatRecipeWeight(draftResult.totals.oilWeight, draftRecipe.unit)} />
-                  <Stat label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
-                  <Stat label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
-                  <Stat label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} hint={`${trimTrailingZeros(formatPercent(draftResult.totals.fragranceLoad))} g/kg`} />
-                  <Stat label="Total batch" value={formatRecipeWeight(draftResult.totals.totalBatch, draftRecipe.unit)} />
-                  <Stat label="Percent total" value={`${formatPercent(draftResult.totals.percent)}%`} hint={Math.abs(100 - draftResult.totals.percent) > 0.01 ? "Needs balancing" : "On target"} />
-                </div>
-              </Card>
-            </RevealSection>
-          </div>
-        </div>
+        <RevealSection reducedMotion={reducedMotion} as="div" delay={140}>
+          <Card title={currentStepMeta.title} subtitle={currentStepMeta.subtitle}>
+            {currentStep === "batch" ? renderBatchStep() : null}
+            {currentStep === "oils" ? renderOilStep() : null}
+            {currentStep === "water" ? renderWaterStep() : null}
+            {currentStep === "lye" ? renderLyeStep() : null}
+            {currentStep === "review" ? renderReviewStep() : null}
+            {currentStep === "output" ? renderOutputStep() : null}
+          </Card>
+        </RevealSection>
 
         {finalizedRecipe && finalResult ? <PrintRecipeCard recipe={finalizedRecipe} result={finalResult} getWaterModeLabel={getWaterModeLabel} /> : null}
         <Footer />
       </div>
+      {isSummaryOpen ? (
+        <div
+          className="disclaimer-overlay print-hidden"
+          role="presentation"
+          onClick={() => setIsSummaryOpen(false)}
+        >
+          <div
+            className="disclaimer-card max-h-[85vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="live-batch-summary-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="disclaimer-eyebrow">Live Batch Snapshot</p>
+                <h2 id="live-batch-summary-title" className="disclaimer-title">
+                  Full batch summary
+                </h2>
+                <p className="disclaimer-copy">
+                  A fuller view of the working batch while you move through the wizard.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSummaryOpen(false)}
+                className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Stat label="Total oils" value={formatRecipeWeight(draftResult.totals.oilWeight, draftRecipe.unit)} />
+              <Stat label={draftResult.lye.label} value={formatRecipeWeight(draftResult.lye.displayAmount, draftRecipe.unit)} />
+              <Stat label="Water" value={formatRecipeWeight(draftResult.totals.waterAmount, draftRecipe.unit)} />
+              <Stat label="Fragrance" value={formatRecipeWeight(draftResult.totals.fragranceWeight, draftRecipe.unit)} hint={`${trimTrailingZeros(formatPercent(draftResult.totals.fragranceLoad))} g/kg`} />
+              <Stat label="Total batch" value={formatRecipeWeight(draftResult.totals.totalBatch, draftRecipe.unit)} />
+              <Stat label="Percent total" value={`${formatPercent(draftResult.totals.percent)}%`} hint={Math.abs(100 - draftResult.totals.percent) > 0.01 ? "Needs balancing" : "On target"} />
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
+                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                  Recipe details
+                </p>
+                <div className="mt-4 space-y-3">
+                  <SummaryRow label="Recipe name" value={draftRecipe.recipeName || "Untitled recipe"} />
+                  <SummaryRow label="Unit" value={draftRecipe.unit.toUpperCase()} />
+                  <SummaryRow label="Superfat" value={`${formatPercent(draftRecipe.superfat)}%`} />
+                  <SummaryRow label="Water method" value={getWaterModeLabel(draftRecipe, draftResult)} />
+                  <SummaryRow label="Fragrance loading" value={`${trimTrailingZeros(formatPercent(draftRecipe.fragranceLoad))} g/kg`} />
+                </div>
+                <div className="mt-5 space-y-2 border-t border-[var(--border)] pt-4">
+                  {draftResult.oils.map((oil) => (
+                    <SummaryRow
+                      key={oil.oilId}
+                      label={`${oil.name} (${formatPercent(oil.percent)}%)`}
+                      value={formatRecipeWeight(oil.weight, draftRecipe.unit)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                    Soap qualities
+                  </p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {Object.entries(draftResult.qualities).map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3"
+                      >
+                        <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                          {key}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold text-[var(--text)]">
+                          {roundTo(value, 2).toFixed(2)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                    Warnings
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {draftResult.warnings.length > 0 ? (
+                      draftResult.warnings.map((warning) => (
+                        <div key={warning} className="warning-card rounded-2xl px-4 py-3 text-sm leading-6">
+                          {warning}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
+                        No warning flags at the moment. This formula looks balanced and ready to keep refining.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <DisclaimerModal open={isDisclaimerOpen} checked={disclaimerChecked} onCheckedChange={setDisclaimerChecked} onConfirm={handleAcceptDisclaimer} />
     </main>
   );
