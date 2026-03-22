@@ -37,6 +37,7 @@ import {
   OilCatalogItem,
   RecipeState,
   SoapCalculationResult,
+  SoapQualityKey,
   Unit,
   WaterMode,
 } from "@/lib/types";
@@ -72,6 +73,16 @@ const LYE_OPTIONS: { value: LyeType; label: string }[] = [
   { value: "naoh", label: "NaOH" },
   { value: "koh", label: "KOH" },
   { value: "koh90", label: "90% KOH" },
+];
+
+const OUTPUT_QUALITY_ORDER: { key: SoapQualityKey; label: string }[] = [
+  { key: "hardness", label: "Hardness" },
+  { key: "cleansing", label: "Cleansing" },
+  { key: "conditioning", label: "Conditioning" },
+  { key: "bubbly", label: "Bubbly" },
+  { key: "creamy", label: "Creamy" },
+  { key: "iodine", label: "Iodine" },
+  { key: "ins", label: "INS" },
 ];
 
 function usePrefersReducedMotion() {
@@ -994,8 +1005,8 @@ export function SoapWizard() {
             <Stat label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
             <Stat label="Total batch" value={formatRecipeWeight(finalResult.totals.totalBatch, finalizedRecipe.unit)} />
           </div>
-          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.28fr)_minmax(280px,0.72fr)]">
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
+          <div className="recipe-output-layout mt-5">
+            <div className="recipe-output-preview-panel rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-5">
               <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Printable recipe sheet</p>
               <h3 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">
                 {finalizedRecipe.recipeName || "Untitled recipe"}
@@ -1013,7 +1024,7 @@ export function SoapWizard() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="recipe-output-sidebar space-y-4">
               <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-soft)]">Output summary</p>
                 <div className="mt-4 space-y-3">
@@ -1036,6 +1047,107 @@ export function SoapWizard() {
                   For the cleanest PDF, use the browser&apos;s default scale and letter-size paper.
                 </p>
               </div>
+            </div>
+          </div>
+          <div className="recipe-output-detail-grid mt-4">
+            <div className="recipe-output-main-column">
+              <section className="recipe-output-card recipe-output-card--formula">
+                <div className="recipe-output-card__heading">
+                  <p className="recipe-output-card__eyebrow">Formula focus</p>
+                  <div>
+                    <h3 className="recipe-output-card__title">Weigh oils and fats first</h3>
+                    <p className="recipe-output-card__copy">
+                      The full oil formula is surfaced here so the weighing workflow stays front and center.
+                    </p>
+                  </div>
+                </div>
+                <div className="recipe-output-focus-list">
+                  {finalResult.oils.map((oil) => (
+                    <div key={oil.oilId} className="recipe-output-focus-row">
+                      <span className="recipe-output-focus-label">
+                        {oil.name} <em>({formatPercent(oil.percent)}%)</em>
+                      </span>
+                      <strong className="recipe-output-focus-value">
+                        {formatRecipeWeight(oil.weight, finalizedRecipe.unit)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className="recipe-output-support-grid">
+                <section className="recipe-output-card">
+                  <div className="recipe-output-card__heading">
+                    <p className="recipe-output-card__eyebrow">NaOH and water</p>
+                    <div>
+                      <h3 className="recipe-output-card__title">Measure the solution</h3>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <SummaryRow label={finalResult.lye.label} value={formatRecipeWeight(finalResult.lye.displayAmount, finalizedRecipe.unit)} />
+                    <SummaryRow label="Pure alkali" value={formatRecipeWeight(finalResult.lye.pureAmount, finalizedRecipe.unit)} />
+                    <SummaryRow label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
+                  </div>
+                </section>
+
+                <section className="recipe-output-card">
+                  <div className="recipe-output-card__heading">
+                    <p className="recipe-output-card__eyebrow">Settings and additives</p>
+                    <div>
+                      <h3 className="recipe-output-card__title">Keep these support values handy</h3>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <SummaryRow label="Superfat" value={`${formatPercent(finalizedRecipe.superfat)}%`} />
+                    <SummaryRow label="Water setting" value={getWaterModeLabel(finalizedRecipe, finalResult)} />
+                    <SummaryRow label="Fragrance load" value={`${trimTrailingZeros(formatPercent(finalizedRecipe.fragranceLoad))} g/kg`} />
+                    <SummaryRow label="Fragrance amount" value={formatRecipeWeight(finalResult.totals.fragranceWeight, finalizedRecipe.unit)} />
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div className="recipe-output-aside">
+              <section className="recipe-output-card">
+                <div className="recipe-output-card__heading">
+                  <p className="recipe-output-card__eyebrow">Soap qualities</p>
+                  <div>
+                    <h3 className="recipe-output-card__title">Calculated balance profile</h3>
+                  </div>
+                </div>
+                <div className="recipe-output-quality-grid">
+                  {OUTPUT_QUALITY_ORDER.map(({ key, label }) => (
+                    <div key={key} className="recipe-output-quality">
+                      <span className="recipe-output-quality__label">{label}</span>
+                      <strong className="recipe-output-quality__value">
+                        {roundTo(finalResult.qualities[key], 2).toFixed(2)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="recipe-output-card">
+                <div className="recipe-output-card__heading">
+                  <p className="recipe-output-card__eyebrow">Warnings and notes</p>
+                  <div>
+                    <h3 className="recipe-output-card__title">Final checks before you make the batch</h3>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {finalResult.warnings.length > 0 ? (
+                    finalResult.warnings.map((warning) => (
+                      <div key={warning} className="warning-card rounded-2xl px-4 py-3 text-sm leading-6">
+                        {warning}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
+                      No warning flags at the moment. This formula looks balanced and ready for the workshop.
+                    </p>
+                  )}
+                </div>
+              </section>
             </div>
           </div>
           <StepNavigation canGoBack onBack={stepBack} onNext={handlePrint} nextLabel="Print / Save PDF" />
