@@ -1,9 +1,10 @@
 "use client";
 
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { DisclaimerModal } from "@/components/disclaimer-modal";
 import { Footer } from "@/components/footer";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 import { Field } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
@@ -55,6 +56,7 @@ const HOMEPAGE_URL = "https://tallowbethysoap.com/";
 const SHARE_URL = "https://calc.tallowbethysoap.com/";
 const SHARE_TEXT = "Tallow Be Thy Soap Lab | Guided cold process soap calculator";
 const DISCLAIMER_KEY = "tallow-be-thy-soap-disclaimer-accepted";
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 const LYE_OPTIONS: { value: LyeType; label: string }[] = [
   { value: "naoh", label: "NaOH" },
@@ -210,6 +212,13 @@ export function SoapWizard() {
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
   const [currentStep, setCurrentStep] = useState<WizardStepId>("batch");
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileStatus, setTurnstileStatus] = useState<
+    "idle" | "verifying" | "verified" | "failed"
+  >("idle");
+  const [turnstileMessage, setTurnstileMessage] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [disclaimerReady, setDisclaimerReady] = useState(false);
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
@@ -229,6 +238,9 @@ export function SoapWizard() {
   const currentStepMeta = WIZARD_STEPS[currentStepIndex];
   const totalPercentDifference = roundTo(100 - draftResult.totals.percent, 2);
   const isDisclaimerOpen = disclaimerReady && !hasAcceptedDisclaimer;
+  const isTurnstileVerified = turnstileStatus === "verified";
+  const canContinueToOutput =
+    reviewAcknowledged && Boolean(turnstileToken) && isTurnstileVerified;
 
   const syncDraftsFromRecipe = (nextRecipe: RecipeState) => {
     setTopLevelDrafts(makeTopLevelDrafts(nextRecipe));
@@ -516,6 +528,11 @@ export function SoapWizard() {
     setFinalizedRecipe(null);
     setEntryMode("percent");
     setCurrentStep("batch");
+    setReviewAcknowledged(false);
+    setTurnstileToken("");
+    setTurnstileStatus("idle");
+    setTurnstileMessage("");
+    setTurnstileResetKey(0);
     syncDraftsFromRecipe(SAMPLE_RECIPE);
   };
 
@@ -525,11 +542,19 @@ export function SoapWizard() {
     setEntryMode("percent");
     setCurrentStep("batch");
     setNewOilId(FEATURED_OIL_IDS[0]);
+    setReviewAcknowledged(false);
+    setTurnstileToken("");
+    setTurnstileStatus("idle");
+    setTurnstileMessage("");
+    setTurnstileResetKey(0);
     syncDraftsFromRecipe(EMPTY_RECIPE);
   };
 
   const stepForward = () => {
     if (currentStep === "review") {
+      if (!canContinueToOutput) {
+        return;
+      }
       setFinalizedRecipe(sanitizeRecipe(draftRecipe));
     }
 
@@ -553,6 +578,92 @@ export function SoapWizard() {
   const handlePrint = () => {
     window.print();
   };
+
+  const resetTurnstileState = useCallback((message?: string) => {
+    setTurnstileToken("");
+    setTurnstileStatus("idle");
+    setTurnstileMessage(message ?? "");
+    setTurnstileResetKey((current) => current + 1);
+  }, []);
+
+  const handleTurnstileExpired = useCallback(() => {
+    resetTurnstileState("Verification expired. Please complete the check again.");
+  }, [resetTurnstileState]);
+
+  const handleTurnstileError = useCallback(
+    (message: string) => {
+      setTurnstileStatus("failed");
+      setTurnstileMessage(message);
+    },
+    [],
+  );
+
+  const handleTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+    setTurnstileStatus("verifying");
+    setTurnstileMessage("Checking verification...");
+  }, []);
+
+  useEffect(() => {
+    if (!turnstileToken) {
+      return;
+    }
+
+    let ignore = false;
+
+    const verifyToken = async () => {
+      try {
+        const response = await fetch("/api/turnstile/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+
+        const data = (await response.json()) as {
+          success?: boolean;
+          message?: string;
+          error?: string;
+        };
+
+        if (ignore) {
+          return;
+        }
+
+        if (response.ok && data.success) {
+          setTurnstileStatus("verified");
+          setTurnstileMessage("Verification complete. You can continue to Recipe Output.");
+          return;
+        }
+
+        setTurnstileStatus("failed");
+        setTurnstileMessage(
+          data.message ??
+            "Verification could not be confirmed. Please reset the check and try again.",
+        );
+        setTurnstileToken("");
+        setTurnstileResetKey((current) => current + 1);
+      } catch {
+        if (ignore) {
+          return;
+        }
+
+        setTurnstileStatus("failed");
+        setTurnstileMessage(
+          "Verification could not be completed right now. Please reset the check and try again.",
+        );
+        setTurnstileToken("");
+        setTurnstileResetKey((current) => current + 1);
+      }
+    };
+
+    verifyToken();
+
+    return () => {
+      ignore = true;
+    };
+  }, [turnstileToken]);
 
   const availableOilOptions = featuredOilOptions.filter(
     (oil) => !draftRecipe.oils.some((entry) => entry.id === oil.id),
@@ -771,7 +882,76 @@ export function SoapWizard() {
           </div>
         </div>
       </div>
-      <StepNavigation canGoBack onBack={stepBack} onNext={stepForward} nextLabel="Generate Recipe Output" />
+      <div className="mt-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-5">
+        <p className="text-xs uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+          Review acknowledgment
+        </p>
+        <h3 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--text)]">
+          Confirm the recipe before final output
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">
+          Acknowledge the formulation note, complete the verification check, and then continue to
+          the clean printable recipe page.
+        </p>
+
+        <label className="mt-5 flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 text-sm leading-6 text-[var(--text)]">
+          <input
+            type="checkbox"
+            checked={reviewAcknowledged}
+            onChange={(event) => setReviewAcknowledged(event.target.checked)}
+            className="mt-1 h-4 w-4 accent-[var(--accent)]"
+          />
+          <span>
+            I understand this calculator is a formulation aid, and I will review my oils, alkali,
+            fragrance limits, and process choices before making a batch.
+          </span>
+        </label>
+
+        <div className="mt-4 space-y-3">
+          <TurnstileWidget
+            siteKey={TURNSTILE_SITE_KEY}
+            resetKey={turnstileResetKey}
+            theme="auto"
+            onToken={handleTurnstileToken}
+            onExpired={handleTurnstileExpired}
+            onError={handleTurnstileError}
+          />
+
+          {turnstileMessage ? (
+            <p
+              className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                turnstileStatus === "failed"
+                  ? "warning-card"
+                  : "border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)]"
+              }`}
+            >
+              {turnstileMessage}
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              type="button"
+              onClick={() => resetTurnstileState("Verification reset. Please complete the check again.")}
+              className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium"
+            >
+              Reset verification
+            </button>
+            {!TURNSTILE_SITE_KEY ? (
+              <p className="text-sm text-[var(--warning)]">
+                Developer note: add the public Turnstile site key before this step can unlock.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <StepNavigation
+        canGoBack
+        onBack={stepBack}
+        onNext={stepForward}
+        nextLabel="Continue to Recipe Output"
+        nextDisabled={!canContinueToOutput}
+      />
     </>
   );
 
