@@ -14,11 +14,16 @@ export type SoapQualityKey =
 
 export type SoapQualityProfile = Record<SoapQualityKey, number>;
 
-export type OilDefinition = {
+export type OilCatalogItem = {
   id: string;
+  slug: string;
   name: string;
+  category: string;
   sapNaoh: number;
   sapKoh: number;
+  isActive: boolean;
+  sortOrder: number;
+  notes: string | null;
   qualities: SoapQualityProfile;
 };
 

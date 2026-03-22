@@ -1,6 +1,7 @@
-import { OIL_MAP } from "@/lib/oil-data";
+import { FALLBACK_OIL_MAP, normalizeOilSlug } from "@/lib/calculator/oils";
 import {
   LyeType,
+  OilCatalogItem,
   OilCalculation,
   RecipeOil,
   RecipeState,
@@ -214,13 +215,16 @@ function getWarnings(oils: OilCalculation[], result: SoapCalculationResult) {
   return warnings;
 }
 
-export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
+export function calculateRecipe(
+  recipe: RecipeState,
+  oilCatalog: Map<string, OilCatalogItem> = FALLBACK_OIL_MAP,
+): SoapCalculationResult {
   const totalOilWeight = Math.max(Number.isFinite(recipe.totalOilWeight) ? recipe.totalOilWeight : 0, 0);
   const fragranceLoad = Math.max(Number.isFinite(recipe.fragranceLoad) ? recipe.fragranceLoad : 0, 0);
 
   const oils: OilCalculation[] = recipe.oils
     .map((recipeOil: RecipeOil) => {
-      const definition = OIL_MAP.get(recipeOil.id);
+      const definition = oilCatalog.get(normalizeOilSlug(recipeOil.id));
       if (!definition) {
         return null;
       }
@@ -230,7 +234,7 @@ export function calculateRecipe(recipe: RecipeState): SoapCalculationResult {
       const discountMultiplier = 1 - recipe.superfat / 100;
 
       return {
-        oilId: definition.id,
+        oilId: definition.slug,
         name: definition.name,
         percent: roundTo(percent, 4),
         weight: roundTo(weight, 6),

@@ -22,9 +22,23 @@ import {
   parseRatioInput,
   roundTo,
 } from "@/lib/calculations";
-import { DEFAULT_RECIPE, EMPTY_RECIPE, FEATURED_OIL_IDS, STORAGE_KEY } from "@/lib/defaults";
-import { OIL_MAP } from "@/lib/oil-data";
-import { EntryMode, LyeType, RecipeState, SoapCalculationResult, Unit, WaterMode } from "@/lib/types";
+import { DEFAULT_RECIPE, EMPTY_RECIPE, STORAGE_KEY } from "@/lib/defaults";
+import {
+  createOilCatalogMap,
+  FALLBACK_OILS,
+  getInitialOilSlug,
+  normalizeOilSlug,
+} from "@/lib/calculator/oils";
+import { fetchActiveOils } from "@/lib/supabase/oils";
+import {
+  EntryMode,
+  LyeType,
+  OilCatalogItem,
+  RecipeState,
+  SoapCalculationResult,
+  Unit,
+  WaterMode,
+} from "@/lib/types";
 import {
   formatRecipeWeight,
   getStepIndex,
@@ -181,7 +195,7 @@ function sanitizeRecipe(input: Partial<RecipeState> | null | undefined): RecipeS
       Array.isArray(input?.oils) && input.oils.length > 0
         ? input.oils
             .filter((oil) => typeof oil?.id === "string" && typeof oil?.percent === "number")
-            .map((oil) => ({ id: oil.id, percent: Math.max(oil.percent, 0) }))
+            .map((oil) => ({ id: normalizeOilSlug(oil.id), percent: Math.max(oil.percent, 0) }))
         : DEFAULT_RECIPE.oils,
   };
 }
@@ -203,7 +217,10 @@ export function SoapWizard() {
   const [draftRecipe, setDraftRecipe] = useState<RecipeState>(DEFAULT_RECIPE);
   const [finalizedRecipe, setFinalizedRecipe] = useState<RecipeState | null>(null);
   const [entryMode, setEntryMode] = useState<EntryMode>("percent");
-  const [newOilId, setNewOilId] = useState<string>(FEATURED_OIL_IDS[0]);
+  const [oilCatalog, setOilCatalog] = useState<OilCatalogItem[]>(FALLBACK_OILS);
+  const [oilsStatus, setOilsStatus] = useState<"loading" | "ready" | "fallback" | "empty">("loading");
+  const [oilsMessage, setOilsMessage] = useState("");
+  const [newOilId, setNewOilId] = useState<string>(getInitialOilSlug(FALLBACK_OILS));
   const [topLevelDrafts, setTopLevelDrafts] = useState<TopLevelDrafts>(() => makeTopLevelDrafts(DEFAULT_RECIPE));
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(DEFAULT_RECIPE));
   const [activeView, setActiveView] = useState<ActiveView>("batch");
@@ -214,16 +231,12 @@ export function SoapWizard() {
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
   const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
 
-  const featuredOilOptions = useMemo(
-    () =>
-      FEATURED_OIL_IDS.map((id) => OIL_MAP.get(id)).filter(
-        (oil): oil is NonNullable<(typeof OIL_MAP extends Map<string, infer V> ? V : never)> =>
-          Boolean(oil),
-      ),
-    [],
+  const oilCatalogMap = useMemo(() => createOilCatalogMap(oilCatalog), [oilCatalog]);
+  const draftResult = useMemo(() => calculateRecipe(draftRecipe, oilCatalogMap), [draftRecipe, oilCatalogMap]);
+  const finalResult = useMemo(
+    () => (finalizedRecipe ? calculateRecipe(finalizedRecipe, oilCatalogMap) : null),
+    [finalizedRecipe, oilCatalogMap],
   );
-  const draftResult = useMemo(() => calculateRecipe(draftRecipe), [draftRecipe]);
-  const finalResult = useMemo(() => (finalizedRecipe ? calculateRecipe(finalizedRecipe) : null), [finalizedRecipe]);
   const currentStep = activeView === "output" ? "review" : activeView;
   const currentStepIndex = getStepIndex(currentStep);
   const currentStepMeta = WIZARD_STEPS[currentStepIndex];
@@ -268,6 +281,69 @@ export function SoapWizard() {
       // Ignore local storage issues.
     }
   }, [disclaimerReady, draftRecipe]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadOils = async () => {
+      setOilsStatus("loading");
+      setOilsMessage("Loading oils from Supabase...");
+
+      const result = await fetchActiveOils();
+      if (ignore) {
+        return;
+      }
+
+      if (result.oils.length > 0) {
+        setOilCatalog(result.oils);
+        setOilsStatus("ready");
+        setOilsMessage("");
+        return;
+      }
+
+      if (FALLBACK_OILS.length > 0) {
+        setOilCatalog(FALLBACK_OILS);
+        setOilsStatus("fallback");
+        setOilsMessage(
+          result.error ??
+            "The live oils catalog is unavailable right now. Using the local starter oils instead.",
+        );
+        return;
+      }
+
+      setOilCatalog([]);
+      setOilsStatus("empty");
+      setOilsMessage("No oils are available right now. Please try again in a moment.");
+    };
+
+    loadOils();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextOilSlug = oilCatalog.find(
+      (oil) => !draftRecipe.oils.some((entry) => normalizeOilSlug(entry.id) === oil.slug),
+    )?.slug;
+
+    if (!nextOilSlug) {
+      if (newOilId !== "") {
+        setNewOilId("");
+      }
+      return;
+    }
+
+    const currentStillAvailable = oilCatalog.some((oil) => oil.slug === newOilId);
+    const currentAlreadySelected = draftRecipe.oils.some(
+      (entry) => normalizeOilSlug(entry.id) === newOilId,
+    );
+
+    if (!currentStillAvailable || currentAlreadySelected) {
+      setNewOilId(nextOilSlug);
+    }
+  }, [draftRecipe.oils, newOilId, oilCatalog]);
 
   useEffect(() => {
     if (!isSummaryOpen) {
@@ -413,18 +489,21 @@ export function SoapWizard() {
       return;
     }
 
+    const normalizedNextOilId = normalizeOilSlug(nextOilId);
+    const normalizedCurrentOilId = normalizeOilSlug(currentOilId);
+
     updateDraft((current) => ({
       ...current,
       oils: current.oils.map((oil, oilIndex) =>
-        oilIndex === index ? { ...oil, id: nextOilId } : oil,
+        oilIndex === index ? { ...oil, id: normalizedNextOilId } : oil,
       ),
     }));
 
     setOilDrafts((current) => {
       const next = { ...current };
-      const sourceKey = currentOilId || `blank-${index}`;
-      next[nextOilId] = next[sourceKey] ?? { percent: "", weight: "" };
-      if (sourceKey !== nextOilId) {
+      const sourceKey = normalizedCurrentOilId || `blank-${index}`;
+      next[normalizedNextOilId] = next[sourceKey] ?? { percent: "", weight: "" };
+      if (sourceKey !== normalizedNextOilId) {
         delete next[sourceKey];
       }
       return next;
@@ -489,12 +568,13 @@ export function SoapWizard() {
     if (!newOilId) {
       return;
     }
-    setDraftRecipe((current) => ({ ...current, oils: [...current.oils, { id: newOilId, percent: 0 }] }));
-    setOilDrafts((current) => ({ ...current, [newOilId]: { percent: "", weight: "" } }));
+    const normalizedNewOilId = normalizeOilSlug(newOilId);
+    setDraftRecipe((current) => ({ ...current, oils: [...current.oils, { id: normalizedNewOilId, percent: 0 }] }));
+    setOilDrafts((current) => ({ ...current, [normalizedNewOilId]: { percent: "", weight: "" } }));
   };
 
   const removeOilAt = (index: number) => {
-    const oilId = draftRecipe.oils[index]?.id ?? "";
+    const oilId = normalizeOilSlug(draftRecipe.oils[index]?.id ?? "");
     setDraftRecipe((current) => ({
       ...current,
       oils: current.oils.filter((_, oilIndex) => oilIndex !== index),
@@ -518,7 +598,7 @@ export function SoapWizard() {
     setFinalizedRecipe(null);
     setEntryMode("percent");
     setActiveView("batch");
-    setNewOilId(FEATURED_OIL_IDS[0]);
+    setNewOilId(getInitialOilSlug(oilCatalog));
     syncDraftsFromRecipe(EMPTY_RECIPE);
   };
 
@@ -572,8 +652,8 @@ export function SoapWizard() {
     setIsEntryApproved(true);
   };
 
-  const availableOilOptions = featuredOilOptions.filter(
-    (oil) => !draftRecipe.oils.some((entry) => entry.id === oil.id),
+  const availableOilOptions = oilCatalog.filter(
+    (oil) => !draftRecipe.oils.some((entry) => normalizeOilSlug(entry.id) === oil.slug),
   );
 
   const renderBatchStep = () => (
@@ -606,12 +686,12 @@ export function SoapWizard() {
     <>
       <div className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
         <Field label="Add oil">
-          <Select value={newOilId} onChange={(event) => setNewOilId(event.target.value)}>
-            {availableOilOptions.length === 0 ? <option value="">All featured oils added</option> : availableOilOptions.map((oil) => <option key={oil.id} value={oil.id}>{oil.name}</option>)}
+          <Select value={newOilId} onChange={(event) => setNewOilId(event.target.value)} disabled={oilCatalog.length === 0}>
+            {availableOilOptions.length === 0 ? <option value="">All active oils added</option> : availableOilOptions.map((oil) => <option key={oil.id} value={oil.slug}>{oil.name}</option>)}
           </Select>
         </Field>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <button type="button" onClick={addOil} disabled={availableOilOptions.length === 0} className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-45">
+          <button type="button" onClick={addOil} disabled={availableOilOptions.length === 0 || oilCatalog.length === 0} className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-45">
             Add selected oil
           </button>
           <button type="button" onClick={normalizeFormula} className="pill-toggle pill-toggle--quiet rounded-2xl px-4 py-3 text-sm font-medium">
@@ -619,6 +699,15 @@ export function SoapWizard() {
           </button>
         </div>
       </div>
+      {oilsStatus !== "ready" || oilsMessage ? (
+        <div className={`mb-5 rounded-3xl px-4 py-3 text-sm leading-6 ${
+          oilsStatus === "fallback" || oilsStatus === "empty"
+            ? "warning-card"
+            : "border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)]"
+        }`}>
+          {oilsMessage || "Loading oils from Supabase..."}
+        </div>
+      ) : null}
       <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 md:flex-row md:items-end md:justify-between">
         <Field label="Entry mode" className="md:w-72">
           <div className="control-cluster grid grid-cols-2 gap-2 rounded-[1.4rem] p-2">
@@ -641,12 +730,18 @@ export function SoapWizard() {
       </div>
       <div className="table-grid">
         {draftRecipe.oils.map((oil, index) => {
-          const definition = OIL_MAP.get(oil.id);
+          const normalizedOilId = normalizeOilSlug(oil.id);
+          const definition = oilCatalogMap.get(normalizedOilId);
           const draftKey = oil.id || `blank-${index}`;
-          const draft = oilDrafts[oil.id] ?? oilDrafts[draftKey] ?? { percent: "", weight: "" };
-          const selectableOils = featuredOilOptions.filter(
-            (option): option is NonNullable<(typeof featuredOilOptions)[number]> =>
-              Boolean(option) && (option.id === oil.id || !draftRecipe.oils.some((entry) => entry.id === option.id && entry.id !== oil.id)),
+          const draft = oilDrafts[normalizedOilId] ?? oilDrafts[draftKey] ?? { percent: "", weight: "" };
+          const selectableOils = oilCatalog.filter(
+            (option) =>
+              option.slug === normalizedOilId ||
+              !draftRecipe.oils.some(
+                (entry) =>
+                  normalizeOilSlug(entry.id) === option.slug &&
+                  normalizeOilSlug(entry.id) !== normalizedOilId,
+              ),
           );
 
           return (
@@ -654,13 +749,15 @@ export function SoapWizard() {
               <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_auto] md:items-end">
                 <div>
                   <p className="mb-2 text-sm font-medium text-[var(--text)]">Oil</p>
-                  <Select value={oil.id} onChange={(event) => handleOilSelectionChange(index, oil.id, event.target.value)}>
+                  <Select value={normalizedOilId} onChange={(event) => handleOilSelectionChange(index, oil.id, event.target.value)} disabled={oilCatalog.length === 0}>
                     <option value="">Choose an oil</option>
                     {selectableOils.map((option) => (
-                      <option key={option.id} value={option.id}>{option.name}</option>
+                      <option key={option.id} value={option.slug}>{option.name}</option>
                     ))}
                   </Select>
-                  {definition ? <p className="mt-2 text-xs text-[var(--text-soft)]">SAP NaOH {definition.sapNaoh} / SAP KOH {definition.sapKoh}</p> : null}
+                  {definition ? <p className="mt-2 text-xs text-[var(--text-soft)]">SAP NaOH {definition.sapNaoh} / SAP KOH {definition.sapKoh}</p> : (
+                    <p className="mt-2 text-xs text-[var(--warning)]">This oil is not available in the current V1 catalog.</p>
+                  )}
                 </div>
                 <Field label="Percent">
                   <TextInput inputMode="decimal" value={entryMode === "weight" ? trimTrailingZeros(formatPercent(oil.percent)) : draft.percent} onChange={(event) => handleOilPercentChangeAt(index, event.target.value)} onBlur={() => normalizeOilBlurAt(index)} suffix="%" />

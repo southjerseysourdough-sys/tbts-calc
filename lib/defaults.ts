@@ -1,18 +1,5 @@
 import { RecipeState } from "@/lib/types";
 
-export const FEATURED_OIL_IDS = [
-  "beef-tallow",
-  "olive-oil",
-  "coconut-oil-76",
-  "shea-butter",
-  "castor-oil",
-  "avocado-oil",
-  "cocoa-butter",
-  "mango-butter",
-  "sweet-almond-oil",
-  "sunflower-oil",
-] as const;
-
 export const DEFAULT_RECIPE: RecipeState = {
   recipeName: "Foundry Cream Bar",
   totalOilWeight: 1200,
@@ -27,7 +14,7 @@ export const DEFAULT_RECIPE: RecipeState = {
   lyeType: "naoh",
   fragranceLoad: 18,
   oils: [
-    { id: "beef-tallow", percent: 40 },
+    { id: "tallow", percent: 40 },
     { id: "olive-oil", percent: 25 },
     { id: "coconut-oil-76", percent: 20 },
     { id: "shea-butter", percent: 10 },
@@ -49,7 +36,7 @@ export const EMPTY_RECIPE: RecipeState = {
   lyeType: "naoh",
   fragranceLoad: 0,
   oils: [
-    { id: "beef-tallow", percent: 0 },
+    { id: "tallow", percent: 0 },
     { id: "olive-oil", percent: 0 },
     { id: "coconut-oil-76", percent: 0 },
   ],
@@ -70,7 +57,7 @@ export const SAMPLE_RECIPE: RecipeState = {
   fragranceLoad: 22,
   oils: [
     { id: "olive-oil", percent: 32 },
-    { id: "beef-tallow", percent: 28 },
+    { id: "tallow", percent: 28 },
     { id: "coconut-oil-76", percent: 18 },
     { id: "avocado-oil", percent: 10 },
     { id: "cocoa-butter", percent: 7 },
