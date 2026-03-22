@@ -1,6 +1,7 @@
 export type Unit = "g" | "oz";
 export type WaterMode = "percentOfOils" | "lyeConcentration" | "waterLyeRatio";
 export type EntryMode = "percent" | "weight";
+export type LyeType = "naoh" | "koh" | "koh90";
 
 export type SoapQualityKey =
   | "hardness"
@@ -36,10 +37,11 @@ export type WaterSettings = {
 export type RecipeState = {
   recipeName: string;
   totalOilWeight: number;
-  fragranceWeight: number;
   unit: Unit;
   superfat: number;
   water: WaterSettings;
+  lyeType: LyeType;
+  fragranceLoad: number;
   oils: RecipeOil[];
 };
 
@@ -49,7 +51,9 @@ export type OilCalculation = {
   percent: number;
   weight: number;
   sapNaoh: number;
+  sapKoh: number;
   lyeNaoh: number;
+  lyeKoh: number;
   qualities: SoapQualityProfile;
 };
 
@@ -57,14 +61,25 @@ export type SoapCalculationResult = {
   oils: OilCalculation[];
   totals: {
     oilWeight: number;
-    fragranceWeight: number;
     percent: number;
+    fragranceLoad: number;
+    fragranceWeight: number;
     lyeAmount: number;
+    lyePureAmount: number;
     waterAmount: number;
     totalBatch: number;
     lyeConcentration: number;
     waterLyeRatio: number;
     waterPercentOfOils: number;
+  };
+  lye: {
+    type: LyeType;
+    label: string;
+    purity: number;
+    displayAmount: number;
+    pureAmount: number;
+    naohAmount: number;
+    kohAmount: number;
   };
   qualities: SoapQualityProfile;
   warnings: string[];
