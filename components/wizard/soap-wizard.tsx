@@ -54,6 +54,7 @@ import {
 
 type OilDraftMap = Record<string, { percent: string; weight: string }>;
 type ActiveView = WizardStepId | "output";
+type OutputTabId = "formula" | "qualities" | "notes";
 
 type TopLevelDrafts = {
   recipeName: string;
@@ -246,6 +247,7 @@ export function SoapWizard() {
   const [topLevelDrafts, setTopLevelDrafts] = useState<TopLevelDrafts>(() => makeTopLevelDrafts(EMPTY_RECIPE));
   const [oilDrafts, setOilDrafts] = useState<OilDraftMap>(() => makeOilDrafts(EMPTY_RECIPE));
   const [activeView, setActiveView] = useState<ActiveView>("batch");
+  const [activeOutputTab, setActiveOutputTab] = useState<OutputTabId>("formula");
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isEntryApproved, setIsEntryApproved] = useState(false);
   const [disclaimerReady, setDisclaimerReady] = useState(false);
@@ -259,6 +261,16 @@ export function SoapWizard() {
     () => (finalizedRecipe ? calculateRecipe(finalizedRecipe, oilCatalogMap) : null),
     [finalizedRecipe, oilCatalogMap],
   );
+  const finalizedOilNotes = useMemo(() => {
+    if (!finalResult) {
+      return [];
+    }
+
+    return finalResult.oils.flatMap((oil) => {
+      const note = oilCatalogMap.get(oil.oilId)?.notes?.trim();
+      return note ? [{ id: oil.oilId, name: oil.name, note }] : [];
+    });
+  }, [finalResult, oilCatalogMap]);
   const currentStep = activeView === "output" ? "review" : activeView;
   const currentStepIndex = getStepIndex(currentStep);
   const currentStepMeta = WIZARD_STEPS[currentStepIndex];
@@ -639,6 +651,7 @@ export function SoapWizard() {
       // Ignore local storage issues.
     }
     applyRecipe(cloneRecipe(EMPTY_RECIPE));
+    setActiveOutputTab("formula");
     setNewOilId(getInitialOilSlug(oilCatalog));
     setRecipeActionTone("info");
     setRecipeActionMessage("Started a fresh blank recipe.");
@@ -671,6 +684,7 @@ export function SoapWizard() {
 
     if (activeView === "review") {
       setFinalizedRecipe(sanitizeRecipe(draftRecipe));
+      setActiveOutputTab("formula");
       setActiveView("output");
       return;
     }
@@ -1049,106 +1063,199 @@ export function SoapWizard() {
               </div>
             </div>
           </div>
-          <div className="recipe-output-detail-grid mt-4">
-            <div className="recipe-output-main-column">
-              <section className="recipe-output-card recipe-output-card--formula">
-                <div className="recipe-output-card__heading">
-                  <p className="recipe-output-card__eyebrow">Formula focus</p>
-                  <div>
-                    <h3 className="recipe-output-card__title">Weigh oils and fats first</h3>
-                    <p className="recipe-output-card__copy">
-                      The full oil formula is surfaced here so the weighing workflow stays front and center.
-                    </p>
+          <div className="recipe-output-tabs mt-4">
+            <div className="result-tab-row" role="tablist" aria-label="Recipe output sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeOutputTab === "formula"}
+                aria-controls="recipe-output-tab-formula"
+                id="recipe-output-tab-button-formula"
+                className="result-tab rounded-2xl px-4 py-3 text-sm font-medium"
+                data-active={activeOutputTab === "formula"}
+                onClick={() => setActiveOutputTab("formula")}
+              >
+                Formula
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeOutputTab === "qualities"}
+                aria-controls="recipe-output-tab-qualities"
+                id="recipe-output-tab-button-qualities"
+                className="result-tab rounded-2xl px-4 py-3 text-sm font-medium"
+                data-active={activeOutputTab === "qualities"}
+                onClick={() => setActiveOutputTab("qualities")}
+              >
+                Qualities
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeOutputTab === "notes"}
+                aria-controls="recipe-output-tab-notes"
+                id="recipe-output-tab-button-notes"
+                className="result-tab rounded-2xl px-4 py-3 text-sm font-medium"
+                data-active={activeOutputTab === "notes"}
+                onClick={() => setActiveOutputTab("notes")}
+              >
+                Notes / Warnings
+              </button>
+            </div>
+
+            {activeOutputTab === "formula" ? (
+              <div
+                id="recipe-output-tab-formula"
+                role="tabpanel"
+                aria-labelledby="recipe-output-tab-button-formula"
+                className="recipe-output-tab-panel"
+              >
+                <div className="recipe-output-main-column">
+                  <section className="recipe-output-card recipe-output-card--formula">
+                    <div className="recipe-output-card__heading">
+                      <p className="recipe-output-card__eyebrow">Formula focus</p>
+                      <div>
+                        <h3 className="recipe-output-card__title">Weigh oils and fats first</h3>
+                        <p className="recipe-output-card__copy">
+                          The exact formula leads this view so the batch can move from screen to scale without hunting.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="recipe-output-focus-list">
+                      {finalResult.oils.map((oil) => (
+                        <div key={oil.oilId} className="recipe-output-focus-row">
+                          <span className="recipe-output-focus-label">
+                            {oil.name} <em>({formatPercent(oil.percent)}%)</em>
+                          </span>
+                          <strong className="recipe-output-focus-value">
+                            {formatRecipeWeight(oil.weight, finalizedRecipe.unit)}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <div className="recipe-output-support-grid">
+                    <section className="recipe-output-card">
+                      <div className="recipe-output-card__heading">
+                        <p className="recipe-output-card__eyebrow">NaOH and water</p>
+                        <div>
+                          <h3 className="recipe-output-card__title">Measure the solution</h3>
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <SummaryRow label={finalResult.lye.label} value={formatRecipeWeight(finalResult.lye.displayAmount, finalizedRecipe.unit)} />
+                        <SummaryRow label="Pure alkali" value={formatRecipeWeight(finalResult.lye.pureAmount, finalizedRecipe.unit)} />
+                        <SummaryRow label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
+                        <SummaryRow label="Fragrance" value={finalResult.totals.fragranceWeight > 0 ? formatRecipeWeight(finalResult.totals.fragranceWeight, finalizedRecipe.unit) : "Not used"} />
+                      </div>
+                    </section>
+
+                    <section className="recipe-output-card">
+                      <div className="recipe-output-card__heading">
+                        <p className="recipe-output-card__eyebrow">Core settings</p>
+                        <div>
+                          <h3 className="recipe-output-card__title">Keep batch settings in view</h3>
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <SummaryRow label="Superfat" value={`${formatPercent(finalizedRecipe.superfat)}%`} />
+                        <SummaryRow label="Water setting" value={getWaterModeLabel(finalizedRecipe, finalResult)} />
+                        <SummaryRow label="Fragrance load" value={`${trimTrailingZeros(formatPercent(finalizedRecipe.fragranceLoad))} g/kg`} />
+                        <SummaryRow label="Total batch" value={formatRecipeWeight(finalResult.totals.totalBatch, finalizedRecipe.unit)} />
+                      </div>
+                    </section>
                   </div>
                 </div>
-                <div className="recipe-output-focus-list">
-                  {finalResult.oils.map((oil) => (
-                    <div key={oil.oilId} className="recipe-output-focus-row">
-                      <span className="recipe-output-focus-label">
-                        {oil.name} <em>({formatPercent(oil.percent)}%)</em>
-                      </span>
-                      <strong className="recipe-output-focus-value">
-                        {formatRecipeWeight(oil.weight, finalizedRecipe.unit)}
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              </div>
+            ) : null}
 
-              <div className="recipe-output-support-grid">
+            {activeOutputTab === "qualities" ? (
+              <div
+                id="recipe-output-tab-qualities"
+                role="tabpanel"
+                aria-labelledby="recipe-output-tab-button-qualities"
+                className="recipe-output-tab-panel"
+              >
                 <section className="recipe-output-card">
                   <div className="recipe-output-card__heading">
-                    <p className="recipe-output-card__eyebrow">NaOH and water</p>
+                    <p className="recipe-output-card__eyebrow">Soap qualities</p>
                     <div>
-                      <h3 className="recipe-output-card__title">Measure the solution</h3>
+                      <h3 className="recipe-output-card__title">Calculated balance profile</h3>
+                      <p className="recipe-output-card__copy">
+                        This formulation intelligence stays on screen where it is useful for refinement, not on the printed workshop sheet.
+                      </p>
                     </div>
                   </div>
-                  <div className="mt-4 space-y-3">
-                    <SummaryRow label={finalResult.lye.label} value={formatRecipeWeight(finalResult.lye.displayAmount, finalizedRecipe.unit)} />
-                    <SummaryRow label="Pure alkali" value={formatRecipeWeight(finalResult.lye.pureAmount, finalizedRecipe.unit)} />
-                    <SummaryRow label="Water" value={formatRecipeWeight(finalResult.totals.waterAmount, finalizedRecipe.unit)} />
-                  </div>
-                </section>
-
-                <section className="recipe-output-card">
-                  <div className="recipe-output-card__heading">
-                    <p className="recipe-output-card__eyebrow">Settings and additives</p>
-                    <div>
-                      <h3 className="recipe-output-card__title">Keep these support values handy</h3>
-                    </div>
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    <SummaryRow label="Superfat" value={`${formatPercent(finalizedRecipe.superfat)}%`} />
-                    <SummaryRow label="Water setting" value={getWaterModeLabel(finalizedRecipe, finalResult)} />
-                    <SummaryRow label="Fragrance load" value={`${trimTrailingZeros(formatPercent(finalizedRecipe.fragranceLoad))} g/kg`} />
-                    <SummaryRow label="Fragrance amount" value={formatRecipeWeight(finalResult.totals.fragranceWeight, finalizedRecipe.unit)} />
+                  <div className="recipe-output-quality-grid">
+                    {OUTPUT_QUALITY_ORDER.map(({ key, label }) => (
+                      <div key={key} className="recipe-output-quality">
+                        <span className="recipe-output-quality__label">{label}</span>
+                        <strong className="recipe-output-quality__value">
+                          {roundTo(finalResult.qualities[key], 2).toFixed(2)}
+                        </strong>
+                      </div>
+                    ))}
                   </div>
                 </section>
               </div>
-            </div>
+            ) : null}
 
-            <div className="recipe-output-aside">
-              <section className="recipe-output-card">
-                <div className="recipe-output-card__heading">
-                  <p className="recipe-output-card__eyebrow">Soap qualities</p>
-                  <div>
-                    <h3 className="recipe-output-card__title">Calculated balance profile</h3>
-                  </div>
-                </div>
-                <div className="recipe-output-quality-grid">
-                  {OUTPUT_QUALITY_ORDER.map(({ key, label }) => (
-                    <div key={key} className="recipe-output-quality">
-                      <span className="recipe-output-quality__label">{label}</span>
-                      <strong className="recipe-output-quality__value">
-                        {roundTo(finalResult.qualities[key], 2).toFixed(2)}
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="recipe-output-card">
-                <div className="recipe-output-card__heading">
-                  <p className="recipe-output-card__eyebrow">Warnings and notes</p>
-                  <div>
-                    <h3 className="recipe-output-card__title">Final checks before you make the batch</h3>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {finalResult.warnings.length > 0 ? (
-                    finalResult.warnings.map((warning) => (
-                      <div key={warning} className="warning-card rounded-2xl px-4 py-3 text-sm leading-6">
-                        {warning}
+            {activeOutputTab === "notes" ? (
+              <div
+                id="recipe-output-tab-notes"
+                role="tabpanel"
+                aria-labelledby="recipe-output-tab-button-notes"
+                className="recipe-output-tab-panel"
+              >
+                <div className="recipe-output-notes-grid">
+                  <section className="recipe-output-card">
+                    <div className="recipe-output-card__heading">
+                      <p className="recipe-output-card__eyebrow">Warnings</p>
+                      <div>
+                        <h3 className="recipe-output-card__title">Final checks before you make the batch</h3>
                       </div>
-                    ))
-                  ) : (
-                    <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
-                      No warning flags at the moment. This formula looks balanced and ready for the workshop.
-                    </p>
-                  )}
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {finalResult.warnings.length > 0 ? (
+                        finalResult.warnings.map((warning) => (
+                          <div key={warning} className="warning-card rounded-2xl px-4 py-3 text-sm leading-6">
+                            {warning}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
+                          No warning flags at the moment. This formula looks balanced and ready for the workshop.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="recipe-output-card">
+                    <div className="recipe-output-card__heading">
+                      <p className="recipe-output-card__eyebrow">Ingredient notes</p>
+                      <div>
+                        <h3 className="recipe-output-card__title">Reference notes from the selected oils</h3>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {finalizedOilNotes.length > 0 ? (
+                        finalizedOilNotes.map((entry) => (
+                          <div key={entry.id} className="recipe-output-note-item rounded-2xl px-4 py-3">
+                            <p className="recipe-output-note-item__title">{entry.name}</p>
+                            <p className="recipe-output-note-item__body">{entry.note}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="warning-empty rounded-2xl px-4 py-3 text-sm">
+                          No stored oil notes are attached to the ingredients in this formula.
+                        </p>
+                      )}
+                    </div>
+                  </section>
                 </div>
-              </section>
-            </div>
+              </div>
+            ) : null}
           </div>
           <StepNavigation canGoBack onBack={stepBack} onNext={handlePrint} nextLabel="Print / Save PDF" />
         </Card>
